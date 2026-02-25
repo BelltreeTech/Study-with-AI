@@ -1,0 +1,397 @@
+% ==============================================
+%  SFC Polymath: Technical Report
+%  Author: Shinri Suzuki (J0220)
+% ==============================================
+
+% 1. Document Class
+\documentclass[uplatex, dvipdfmx, a4paper, 11pt]{jsarticle}
+
+% ----------------------------------------------
+%  2. Packages
+% ----------------------------------------------
+\usepackage[top=25truemm,bottom=25truemm,left=25truemm,right=25truemm]{geometry}
+\usepackage{amsmath, amssymb, mathtools, bm}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{float}
+\usepackage[dvipdfmx, bookmarks=true, setpagesize=false, colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black]{hyperref}
+\usepackage{pxjahyper}
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Code Style Definition
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% ----------------------------------------------
+%  3. Metadata
+% ----------------------------------------------
+\title{SFC Polymath：RAGに基づく自律型学習システムの開発と実装\\
+\large ー多機能エージェントによる能動的学習支援ー}
+\author{慶應義塾大学 総合政策学部 2026年度入学者\\ 受験番号 J0220 \quad 氏名 鈴木 真理}
+\date{2026年3月}
+
+% ==============================================
+%  The World Begins Here
+% ==============================================
+\begin{document}
+
+% ==============================================
+%  Abstract Page
+% ==============================================
+\begin{center}
+    {\Large \textbf{自主課題レポート：概要}} \\[5mm]
+    {\large \textbf{SFC Polymath：RAGに基づく自律型学習システムの開発と実装}} \\[2mm]
+    {\large \textbf{ー多機能エージェントによる能動的学習支援ー}} \\[5mm]
+    {\large 総合政策学部 2026年度入学者 \quad J0220 \quad 鈴木 真理} \\[2mm]
+    \rule{\textwidth}{0.4mm}
+\end{center}
+
+\thispagestyle{empty}
+
+\section*{要旨}
+大学における学習は、膨大な専門書を「読む」だけでは完結しない。
+概念の体系的理解、批判的検討、そして自らの言葉で説明できる力が求められる。
+従来の学習支援システムの多くは、単語検索やフラッシュカードに留まり、
+学習者の深い理解を促す設計にはなっていない。
+
+本稿では、Retrieval-Augmented Generation（RAG）技術を核に、
+OCRによる画像PDF対応、ベクトル検索による知識抽出、
+ソクラテス式対話による思考誘導、そして合格ライン90点の厳格な修了試験を統合した
+自律型学習システム「SFC Polymath」の設計と実装を報告する。
+本システムは、AIを「答えを教える道具」ではなく
+「問いを投げかける教授」として機能させることで、
+受動的な情報摂取から能動的な知識構築への転換を実現する。
+
+\vfill
+\clearpage
+
+% ==============================================
+%  Main Body
+% ==============================================
+\setcounter{page}{1}
+
+% ==============================================================
+\section{序論 (Introduction)}
+% ==============================================================
+
+\subsection{背景}
+SFCの学問は分野横断的である。
+心理学、深層学習、経済学――異なる領域のPDF教材が際限なく積み上がる。
+しかし、専門書を1冊読み通す行為は、もはや情報処理の限界に挑む作業であり、
+単なる通読では理解の定着に至らないことが経験的に知られている。
+
+加えて、多くのPDF教材はスキャンされた画像であり、
+テキスト検索すらできない状態で提供されることも少なくない。
+「読めない本」から知識を引き出す手段が必要であった。
+
+\subsection{目的}
+本プロジェクトの目的は、以下の3つの能力を持つ学習システムの構築である。
+
+\begin{enumerate}
+    \item \textbf{理解}：膨大なPDF群から関連知識を自動抽出し、
+          大学院レベルの講義ノートを生成する。
+    \item \textbf{議論}：学習者の質問に対し、ソクラテス・メソッドにより
+          自律的思考を誘導する。
+    \item \textbf{評価}：複合問題形式の修了試験で理解度を厳格に測定し、
+          合格するまで次章に進めない構造を実現する。
+\end{enumerate}
+
+単なるRAG検索エンジンではなく、「鬼の大学（Hardcore University）」として
+学習者を鍛える統合環境の実現が、本研究の中心課題である。
+
+
+% ==============================================================
+\section{システムアーキテクチャ (System Architecture)}
+% ==============================================================
+
+本システムは、Python / Streamlit を基盤とし、
+OpenAI APIを介したLLM連携により教育的機能を実現する。
+
+\subsection{多学部キャンパス構造}
+本システムでは、\texttt{data/} ディレクトリ配下のフォルダ名が
+そのまま「学部（科目）」として機能する。
+
+\begin{verbatim}
+data/
+  DeepLearning/
+    zero-dl-1.pdf
+    zero-dl-2.pdf
+  Psychology/
+    intro-psychology.pdf
+  Economics/
+    micro-economics.pdf
+\end{verbatim}
+
+ユーザーがフォルダにPDFを追加するだけで、新たな学部が動的に設立される。
+この設計により、システム側のコード修正なしに学習領域を無限に拡張できる。
+
+\subsection{不滅の記憶：ベクトルデータベース}
+PDFから抽出されたテキストは、チャンク分割の後、
+OpenAI Embedding API（\texttt{text-embedding-3-small}）を用いてベクトル化され、
+NumPyベースのインデックスとして永続化される。
+
+一度構築されたインデックスは \texttt{cache/} ディレクトリに保存され、
+2回目以降の起動時にはキャッシュから即座に復元される。
+これにより、数百ページのPDFを毎回再処理することなく、
+知識ベースへの高速アクセスが実現される。
+
+検索には内積（コサイン類似度）に基づくTop-K検索を用い、
+クエリとの意味的近接性が高いチャンクを抽出する。
+
+\subsection{眼の獲得：OCRフォールバック}
+専門書PDFの中には、全ページがスキャン画像で構成され、
+テキストレイヤを持たないものが存在する。
+これらの「盲目のPDF」に対応するため、
+PyMuPDF抽出テキストが50文字以下の場合にOCRを自動発動するロジックを実装した。
+
+\begin{lstlisting}[language=Python, caption=OCR Fallback Logic (src/pdf\_reader.py), label=code:ocr]
+def extract_text_from_pdf(pdf_path: str) -> list[dict]:
+    # 1. PyMuPDF extraction attempt
+    pages = _extract_with_pymupdf(pdf_path)
+    total_chars = sum(len(p["text"]) for p in pages)
+
+    if total_chars > k_ocrThreshold:  # threshold = 50
+        return pages
+
+    # 2. OCR fallback: Tesseract + pdf2image
+    print(f"  Text too short ({total_chars} chars). "
+          f"Switching to OCR: {pdf_path}")
+
+    if not _ocr_available:
+        raise ValueError("OCR libraries not installed")
+
+    ocr_pages = _extract_with_ocr(pdf_path)
+    return ocr_pages if ocr_pages else pages
+\end{lstlisting}
+
+コード\ref{code:ocr}に示すように、まずPyMuPDFによるテキスト抽出を試み、
+抽出文字数が閾値（50文字）以下であれば「画像PDF」と判定し、
+Tesseract OCR（日本語＋英語）による強制テキスト化を実行する。
+この二段階方式により、テキストPDFには高速処理を、
+画像PDFにはOCR処理を適用する最適な分岐が実現される。
+
+
+% ==============================================================
+\section{教育的機能の実装 (Educational Features)}
+% ==============================================================
+
+\subsection{カリキュラムモード}
+本システムの中核機能は、AIが自動設計するカリキュラムに沿った段階的学習である。
+ユーザーが学習テーマ（例：「Deep Learning」）を指定すると、
+LLMが全5〜6章の体系的カリキュラムを設計する。
+
+各章は以下のライフサイクルを持つ：
+\begin{enumerate}
+    \item \textbf{講義生成}：章タイトルに基づきRAG検索を行い、
+          大学院レベルの講義ノート（3000文字以上、6セクション構成）を生成。
+    \item \textbf{議論}：生成された講義についてAI教授と質疑応答（ソクラテス・バトル）。
+    \item \textbf{修了試験}：講義内容\textbf{のみ}に基づく複合問題を出題。
+          合格（90点以上）するまで次章には進めない。
+    \item \textbf{進級}：合格後、次章がアンロックされ学習が進行する。
+\end{enumerate}
+
+講義生成プロンプトは以下の6セクションの出力を強制する：
+\begin{itemize}
+    \item[\textcircled{1}] 学術的背景と動機
+    \item[\textcircled{2}] 核心概念の体系的整理
+    \item[\textcircled{3}] 理論的詳細解説（数式導出含む）
+    \item[\textcircled{4}] 実験事例・応用例
+    \item[\textcircled{5}] 批判的検討
+    \item[\textcircled{6}] まとめと展望
+\end{itemize}
+
+\subsection{Mermaid.jsによる知識の視覚化}
+テキストのみの講義は、概念間の関係性や処理フローの把握に限界がある。
+そこで、講義生成プロンプトにMermaid.js図解の生成を指示し、
+\texttt{streamlit-mermaid}ライブラリによりアプリ上でダイアグラムを描画する機能を実装した。
+
+フローチャート（\texttt{graph TD}）、シーケンス図（\texttt{sequenceDiagram}）、
+マインドマップ（\texttt{mindmap}）など、内容に応じた図解が自動選択される。
+テキストと図解が交互に表示されることで、
+「読む→見る→読む」という多感覚的な学習体験が実現される。
+
+レンダリングロジックは、正規表現によりMermaidコードブロックを検出・分離し、
+通常テキストは \texttt{st.markdown()}、
+Mermaidブロックは \texttt{st\_mermaid()} で描画する設計とした。
+
+\subsection{ソクラテス・バトル：AI教授との対話的議論}
+本システムの核心的な教育哲学は、「答えを教えない」ことにある。
+講義を読んだ学習者が質問や反論を投げかけると、
+AI教授はソクラテス・メソッドに基づき、
+「なぜそう思うのか？」「その定義の根拠は？」と問い返す。
+
+\begin{lstlisting}[language=Python, caption=Socratic Dialogue Prompt (src/rag\_pipeline.py), label=code:socratic]
+system_prompt = (
+    "You are a strict professor practicing the "
+    "Socratic Method.\n\n"
+    "- Do NOT simply answer questions. Instead, "
+    "  ask back: 'Why do you think so?'\n"
+    "- Present counterexamples to reveal "
+    "  misunderstandings.\n"
+    "- Include at least one probing question "
+    "  in every response.\n"
+    "- Base all discussion on the lecture content "
+    "  provided below.\n\n"
+    f"[Lecture Content]\n\n{lecture_content[:3000]}"
+)
+\end{lstlisting}
+
+コード\ref{code:socratic}に示すシステムプロンプトにより、
+LLMは「教える」のではなく「問う」存在として振る舞う。
+章ごとに対話履歴は独立管理され、
+章が切り替わると自動的にリセットされる。
+
+\subsection{Hardcore修了試験}
+修了試験は、講義内容\textbf{のみ}に基づいて出題される。
+これは、RAG検索で取得した教科書のランダムな箇所が試験に出る
+「不公平」を排除するための設計判断である。
+
+\begin{lstlisting}[language=Python, caption=Lecture-Based Exam Constraint, label=code:exam]
+# Added to system prompt when lecture_content exists
+lecture_constraint = (
+    "[CRITICAL RULES]\n"
+    "1. Do NOT include any terms or concepts "
+    "   not explicitly stated in the lecture notes.\n"
+    "2. Reference materials are ONLY for verifying "
+    "   answer accuracy, NOT for expanding scope.\n"
+    "3. A student who carefully reads the lecture "
+    "   should logically be able to score 100.\n"
+)
+\end{lstlisting}
+
+試験構成は100点満点で、以下の複合形式をとる：
+\begin{itemize}
+    \item \textbf{パートA}：選択問題（各4点 $\times$ 5問 $=$ 20点）
+    \item \textbf{パートB}：記述論述（各16点 $\times$ 5問 $=$ 80点）
+\end{itemize}
+
+採点は「鬼採点モード」と名付けた厳格基準で行われ、
+記述問題は正確性・網羅性・論理性・深度の4軸（各4点）で評価される。
+合格ライン90点を満たさない限り、先へは進めない。
+
+
+% ==============================================================
+\section{実装詳細 (Implementation Details)}
+% ==============================================================
+
+\subsection{技術スタック}
+本システムの技術スタックは以下の通りである。
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{レイヤ} & \textbf{技術} \\
+\hline
+言語 & Python 3.12 \\
+フレームワーク & Streamlit \\
+LLM & OpenAI GPT-4o-mini \\
+Embedding & text-embedding-3-small (1536次元) \\
+PDF処理 & PyMuPDF (fitz) \\
+OCR & Tesseract + pdf2image + Poppler \\
+図解 & streamlit-mermaid (Mermaid.js) \\
+パッケージ管理 & uv \\
+\hline
+\end{tabular}
+\caption{技術スタック一覧}
+\label{tab:stack}
+\end{table}
+
+\subsection{RAGパイプラインの構造}
+\texttt{src/rag\_pipeline.py} に実装された \texttt{RAGPipeline} クラスが
+システムの中核を担う。以下にその主要メソッドを列挙する。
+
+\begin{itemize}
+    \item \texttt{\_\_init\_\_}: PDFの読み込み、チャンク分割、Embedding生成、
+          キャッシュ管理を行うコンストラクタ。
+    \item \texttt{query}: 質問応答のメインロジック。
+          クエリ拡張、ベクトル検索、LLM回答生成を統合。
+    \item \texttt{generate\_lecture}: RAG検索結果から大学院レベルの講義ノートを生成。
+    \item \texttt{generate\_quiz}: 難易度別（Easy/Normal/Hard）の試験問題を生成。
+          講義ベース出題にも対応。
+    \item \texttt{grade\_answer}: 難易度に応じた採点基準で回答を評価。
+    \item \texttt{run\_socratic\_dialogue}: ソクラテス式対話を実行。
+    \item \texttt{generate\_curriculum}: 体系的カリキュラム（全5〜6章）を設計。
+\end{itemize}
+
+\subsection{模擬試験モードの拡張}
+カリキュラムとは独立した「模擬試験（Feynman Drill）」モードでは、
+科目と難易度を任意に選択して試験を受けることができる。
+
+難易度は3段階で、各段階の試験構成と合格基準が異なる：
+\begin{itemize}
+    \item \textbf{Easy}（学部級）：用語確認＋短答記述。合格ライン70点。
+    \item \textbf{Normal}（修士級）：4択＋論述の複合問題。合格ライン90点。
+    \item \textbf{Hard}（博士級）：批判的分析＋統合論述。合格ライン95点。
+\end{itemize}
+
+\subsection{進捗の永続化}
+学習進捗（カリキュラム状態、講義内容、現在の章）は
+JSON形式で \texttt{progress/} ディレクトリに保存される。
+講義生成直後に即時保存が行われるため、
+ブラウザのリロードやシステム再起動によるデータ損失を防止する。
+
+
+% ==============================================================
+\section{結論 (Conclusion)}
+% ==============================================================
+
+本稿では、RAG技術を核とした自律型学習システム「SFC Polymath」の
+設計思想と実装を報告した。本システムの特筆すべき成果は以下の通りである。
+
+\begin{enumerate}
+    \item \textbf{知識抽出の自動化}：画像PDFを含むあらゆる教材から、
+          OCRフォールバックにより確実にテキストを抽出し、
+          ベクトル検索可能な知識基盤を構築した。
+    \item \textbf{能動的学習の実現}：ソクラテス・メソッドによる対話型議論と、
+          講義内容に厳密に基づく修了試験により、
+          受動的な情報摂取から能動的な知識構築への転換を達成した。
+    \item \textbf{視覚的理解の支援}：Mermaid.js図解の自動生成により、
+          概念構造やプロセスフローの直感的把握を可能にした。
+\end{enumerate}
+
+今後の展望として、以下の拡張を計画している。
+\begin{itemize}
+    \item 講義内容のポッドキャスト化（音声合成による聴覚的学習）。
+    \item 学習者間のスコアボード機能による競争的学習環境。
+    \item マルチモーダルRAG（図表・数式画像の直接理解）。
+\end{itemize}
+
+「車輪の再発明」は無駄ではない。
+しかし、車輪を理解した者が次に作るべきは、車輪を作る工場である。
+SFC Polymathは、その工場の設計図である。
+
+\begin{thebibliography}{9}
+  \bibitem{saito1} 斎藤康毅, 『ゼロから作るDeep Learning ―Pythonで学ぶディープラーニングの理論と実装』, オライリー・ジャパン, 2016.
+  \bibitem{lewis2020} Patrick Lewis et al., ``Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks'', \textit{NeurIPS}, 2020.
+  \bibitem{openai_embedding} OpenAI, ``Embeddings --- OpenAI API Documentation'', 2024.
+  \bibitem{streamlit} Streamlit Inc., ``Streamlit --- A faster way to build and share data apps'', \url{https://streamlit.io/}, 2024.
+  \bibitem{tesseract} Ray Smith, ``An Overview of the Tesseract OCR Engine'', \textit{ICDAR}, 2007.
+  \bibitem{mermaid} Knut Sveidqvist, ``Mermaid --- Diagramming and charting tool'', \url{https://mermaid.js.org/}, 2024.
+\end{thebibliography}
+
+\end{document}

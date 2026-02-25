@@ -1,0 +1,162 @@
+% ==============================================
+%  SFC Pre-enrollment Report: The Ultimate Template (Fixed)
+%  Author: Deus Ex Machina & Shinri Suzuki
+% ==============================================
+
+% 1. ドキュメントクラス
+\documentclass[uplatex, dvipdfmx, a4paper, 11pt]{jsarticle}
+
+% ----------------------------------------------
+%  2. 武装 (Packages)
+% ----------------------------------------------
+\usepackage[top=25truemm,bottom=25truemm,left=25truemm,right=25truemm]{geometry}
+\usepackage{amsmath, amssymb, mathtools, bm}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{float} 
+\usepackage[dvipdfmx, bookmarks=true, setpagesize=false, colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black]{hyperref}
+\usepackage{pxjahyper}
+
+% 【修正箇所】 jlisting を削除し、listings のみにした
+\usepackage{listings} 
+\usepackage{xcolor}
+
+% コード掲載のデザイン定義
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% ----------------------------------------------
+%  3. メタデータ定義
+% ----------------------------------------------
+\title{自主課題レポート：深層学習の数理的・技術的基盤の構築\\ \large ーブラックボックスからの脱却ー}
+\author{慶應義塾大学 総合政策学部 2026年度入学者\\ 受験番号 J0220 \quad 氏名 鈴木 真理}
+\date{2026年3月4日}
+
+% ==============================================
+%  The World Begins Here
+% ==============================================
+\begin{document}
+
+% ==============================================
+%  PART 1: 概要 (Abstract)
+% ==============================================
+\begin{center}
+    {\Large \textbf{自主課題レポート：概要}} \\[5mm]
+    {\large \textbf{深層学習の数理的・技術的基盤の構築 ―ブラックボックスからの脱却―}} \\[5mm]
+    {\large 総合政策学部 2026年度入学者 \quad J0220 \quad 鈴木 真理} \\[2mm]
+    \rule{\textwidth}{0.4mm}
+\end{center}
+
+\thispagestyle{empty}
+
+\section*{要旨}
+本稿は、深層学習（Deep Learning）の基礎となる数理モデルおよび実装技術の習得課程とその成果を報告するものである。
+近年のAI技術の民主化に伴い、ブラックボックス的な利用が容易となる一方で、医療AI開発（Project Polaris）においては、その推論過程の透明性と安全性が不可欠である。
+本課題では、『ゼロから作るDeep Learning』を主軸に、計算グラフを用いた誤差逆伝播法の導出、およびNumPyのみを用いたニューラルネットワークの実装を行った。
+その結果、ライブラリに依存しない数理的理解が、モデルの挙動予測およびデバッグにおいて決定的役割を果たすことを確認した。
+
+\vfill
+\clearpage
+
+% ==============================================
+%  PART 2: 本論 (Main Body)
+% ==============================================
+\setcounter{page}{1}
+
+\section{はじめに (Introduction)}
+\subsection{背景と目的}
+なぜ私はコードを書くのか。なぜ数式と向き合うのか。
+現在、AI技術は急速に発展しているが、その中身を理解せぬまま医療応用を行うことは倫理的なリスクを孕む。
+本章では、私の自主課題の目的と、SFCでの学習に向けた位置づけを述べる。
+
+\subsection{Project Polarisとの関連性}
+私が構想する医療AI「Polaris」において、信頼性（Trustworthy AI）は核心的価値である。
+
+\section{数理的基盤 (Mathematical Framework)}
+ニューラルネットワークの学習を支えるのは、偏微分と連鎖律（Chain Rule）である。
+
+\subsection{計算グラフと連鎖律}
+学習の目的は、損失関数 $L(\bm{W})$ を最小化する重みパラメータ $\bm{W}$ を探索することである。
+勾配降下法による更新式は以下のように記述される。
+
+\begin{equation}
+  \bm{W} \leftarrow \bm{W} - \eta \frac{\partial L}{\partial \bm{W}}
+  \label{eq:gradient_descent}
+\end{equation}
+
+ここで $\eta$ は学習率を表す。式(\ref{eq:gradient_descent})における勾配計算を効率化するため、逆伝播法を用いた。
+
+\section{実装と検証 (Implementation)}
+\texttt{NumPy} を用いて、AffineレイヤおよびReLUレイヤをクラスとして実装した。
+
+\subsection{Affineレイヤの実装}
+順伝播の核となる行列積の実装を以下に示す（ソースコード1）。
+
+% jlistingがないため、コード内の日本語コメントは文字化けやズレの原因になる可能性がある。
+% 安全のため、コメントは英語推奨だが、uplatexならある程度耐えられるはずだ。
+\begin{lstlisting}[language=Python, caption=Affine Layer Implementation, label=code:affine]
+import numpy as np
+
+class Affine:
+    def __init__(self, W, b):
+        self.W = W
+        self.b = b
+        self.x = None
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        self.x = x
+        # Matrix multiplication
+        out = np.dot(x, self.W) + self.b 
+        return out
+
+    def backward(self, dout):
+        dx = np.dot(dout, self.W.T)
+        self.dW = np.dot(self.x.T, dout)
+        self.db = np.sum(dout, axis=0)
+        return dx
+\end{lstlisting}
+
+コード\ref{code:affine}に示す通り、逆伝播においては行列の形状（Shape）を整合させるために転置操作 `W.T` が不可欠である。
+
+\section{考察 (Discussion)}
+本実装を通じて、以下の知見を得た。
+\begin{enumerate}
+    \item \textbf{形状確認の重要性:} バグの9割は行列の次元不一致に起因する。
+    \item \textbf{放送（Broadcast）の罠:} バイアス加算時にNumPyが自動で行うブロードキャストは便利だが、逆伝播時の `sum` 操作を見落とす原因となる。
+\end{enumerate}
+
+\section{おわりに (Conclusion)}
+「車輪の再発明」は無駄ではない。車輪の構造を知る者だけが、より速い車輪を作れるからだ。
+本課題で得た基礎力を元に、入学後はTransformer等のLLMアーキテクチャの解析へと進む。
+
+\begin{thebibliography}{9}
+  \bibitem{saito1} 斎藤康毅, 『ゼロから作るDeep Learning ―Pythonで学ぶディープラーニングの理論と実装』, オライリー・ジャパン, 2016.
+  \bibitem{goodfellow} Ian Goodfellow, Yoshua Bengio, and Aaron Courville, \textit{Deep Learning}, MIT Press, 2016.
+  \bibitem{ao_guide} 慶應義塾大学SFC, ``AO入試 入学手続者の自主課題について'', 2025.
+\end{thebibliography}
+
+\end{document}
