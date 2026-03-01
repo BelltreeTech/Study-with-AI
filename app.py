@@ -23,16 +23,41 @@ from src.views.view_exam import render_exam_mode
 k_dataDir = Path("data")
 
 
-def get_available_subjects(base_path: str = "data") -> list[str]:
-    """data/配下のサブフォルダ名（科目名）のリストを返す。"""
+def get_grouped_subjects(base_path: str = "data") -> dict[str, list[str]]:
+    """
+    data/配下の2階層ディレクトリ構造を読み込み、カテゴリ別の科目辞書を返す。
+
+    data/
+    ├── Deep Learning/     ← 親カテゴリ
+    │   ├── 深層学習/      ← 子科目（PDFを含む）
+    │   │   └── book.pdf
+    │   └── 機械学習/
+    │       └── ml.pdf
+    └── Mathematics/
+        └── 線形代数/
+            └── la.pdf
+
+    Returns:
+        {"Deep Learning": ["深層学習", "機械学習"], "Mathematics": ["線形代数"]}
+    """
     base: Path = Path(base_path)
     if not base.exists():
-        return []
-    return sorted(
-        entry.name
-        for entry in base.iterdir()
-        if entry.is_dir() and any(entry.glob("*.pdf"))
-    )
+        return {}
+
+    grouped: dict[str, list[str]] = {}
+    for category_dir in sorted(base.iterdir()):
+        if not category_dir.is_dir():
+            continue
+        # 子ディレクトリのうち、PDFを含むものだけを科目として認識
+        subjects: list[str] = sorted(
+            child.name
+            for child in category_dir.iterdir()
+            if child.is_dir() and any(child.glob("*.pdf"))
+        )
+        if subjects:
+            grouped[category_dir.name] = subjects
+
+    return grouped
 
 
 def _build_components(subject: str) -> tuple[RAGCore, AITutor]:
@@ -78,47 +103,55 @@ def _render_lobby() -> None:
     st.title("📖 Study With AI")
     st.caption("学びたい科目を選んでください。各科目には専用のPDF教材が格納されています。")
 
-    subjects: list[str] = get_available_subjects()
+    grouped: dict[str, list[str]] = get_grouped_subjects()
 
-    if not subjects:
+    if not grouped:
         st.error(
             "data/ ディレクトリに科目フォルダが見つかりません。\n\n"
-            "以下のようなフォルダ構造でPDFを配置してください:\n\n"
+            "以下のような2階層フォルダ構造でPDFを配置してください:\n\n"
             "```\n"
             "data/\n"
-            "├── DeepLearning/\n"
-            "│   └── deep_learning.pdf\n"
-            "├── Math/\n"
-            "│   └── linear_algebra.pdf\n"
-            "└── Science/\n"
-            "    └── physics.pdf\n"
+            "├── Deep Learning/\n"
+            "│   ├── 深層学習/\n"
+            "│   │   └── deep_learning.pdf\n"
+            "│   └── 機械学習/\n"
+            "│       └── ml.pdf\n"
+            "└── Mathematics/\n"
+            "    └── 線形代数/\n"
+            "        └── linear_algebra.pdf\n"
             "```"
         )
         st.stop()
 
-    st.subheader(f"📂 利用可能な科目（{len(subjects)} 件）")
+    # 全科目数をカウント
+    total_subjects: int = sum(len(subs) for subs in grouped.values())
+    st.subheader(f"📂 利用可能な科目（{total_subjects} 件 / {len(grouped)} カテゴリ）")
 
-    for subject_name in subjects:
-        subject_dir: Path = Path("data") / subject_name
-        pdf_count: int = len(list(subject_dir.glob("*.pdf")))
-        pdf_names: list[str] = [p.name for p in sorted(subject_dir.glob("*.pdf"))]
+    for category_name, subject_list in grouped.items():
+        st.header(f"📁 {category_name}")
 
-        with st.container(border=True):
-            col_info, col_action = st.columns([3, 1])
+        for subject_name in subject_list:
+            subject_path: str = f"{category_name}/{subject_name}"
+            subject_dir: Path = Path("data") / category_name / subject_name
+            pdf_count: int = len(list(subject_dir.glob("*.pdf")))
+            pdf_names: list[str] = [p.name for p in sorted(subject_dir.glob("*.pdf"))]
 
-            with col_info:
-                st.markdown(f"### 📚 {subject_name}")
-                st.caption(f"教材: {pdf_count} 冊 — {', '.join(pdf_names)}")
+            with st.container(border=True):
+                col_info, col_action = st.columns([3, 1])
 
-            with col_action:
-                if st.button(
-                    "📚 学習を開始する",
-                    key=f"select_{subject_name}",
-                    type="primary",
-                    use_container_width=True,
-                ):
-                    st.session_state["selected_subject"] = subject_name
-                    st.rerun()
+                with col_info:
+                    st.markdown(f"### 📚 {subject_name}")
+                    st.caption(f"教材: {pdf_count} 冊 — {', '.join(pdf_names)}")
+
+                with col_action:
+                    if st.button(
+                        "📚 学習を開始する",
+                        key=f"select_{subject_path}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        st.session_state["selected_subject"] = subject_path
+                        st.rerun()
 
 
 def main() -> None:
@@ -141,8 +174,13 @@ def main() -> None:
 
     # ---- サイドバー ----
     with st.sidebar:
-        # 科目名表示＋ロビーに戻るボタン
-        st.markdown(f"### 📚 科目: **{selected_subject}**")
+        # 科目名表示（"親カテゴリ/子科目" → "親カテゴリ > **子科目**" 形式）
+        if "/" in selected_subject:
+            parts: list[str] = selected_subject.split("/")
+            display_label: str = f"{parts[0]} > **{parts[-1]}**"
+        else:
+            display_label = f"**{selected_subject}**"
+        st.markdown(f"### 📚 科目: {display_label}")
         if st.button("🏠 科目を選び直す（ロビーへ）", use_container_width=True):
             # セッションをクリアしてロビーに戻る
             st.session_state["selected_subject"] = ""

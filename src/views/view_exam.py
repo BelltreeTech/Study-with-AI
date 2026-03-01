@@ -9,7 +9,6 @@ from pathlib import Path
 
 from src.core.rag_core import RAGCore
 from src.core.ai_tutor import AITutor
-from src.progress import get_all_courses
 from src.config import PASS_SCORES
 
 
@@ -55,16 +54,22 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
     st.subheader("⚙️ 試験設定")
     col_subject, col_diff = st.columns([2, 1])
 
-    # 科目一覧を取得（カリキュラムで登録済みのコース）
-    all_courses: list[str] = get_all_courses()
-    # 現在のパイプラインの科目もフォールバックとして含める
-    current_subject: str = ""  # app.pyから渡されたai_tutorには科目情報なし
+    # 科目一覧を取得（data/配下の2階層物理ディレクトリを使用）
+    from app import get_grouped_subjects
+    grouped: dict[str, list[str]] = get_grouped_subjects()
+    # "category/subject" 形式のリストを構築
+    available_subjects: list[str] = [
+        f"{cat}/{subj}"
+        for cat, subs in grouped.items()
+        for subj in subs
+    ]
+    current_subject: str = st.session_state.get("selected_subject", "")
     subject_options: list[str] = []
-    if current_subject:
+    if current_subject and current_subject in available_subjects:
         subject_options.append(current_subject)
-    for course in all_courses:
-        if course not in subject_options:
-            subject_options.append(course)
+    for subj in available_subjects:
+        if subj not in subject_options:
+            subject_options.append(subj)
     if not subject_options:
         subject_options = [current_subject or "default"]
 
