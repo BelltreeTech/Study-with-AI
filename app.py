@@ -11,7 +11,8 @@ data/ ディレクトリ内のPDFを選択し、チャットインターフェ�
 import streamlit as st
 from pathlib import Path
 
-from src.rag_pipeline import RAGPipeline
+from src.core.rag_core import RAGCore
+from src.core.ai_tutor import AITutor
 from src.views.view_rag import render_rag_mode
 from src.views.view_curriculum import render_curriculum_mode
 from src.views.view_exam import render_exam_mode
@@ -33,29 +34,42 @@ def get_available_subjects(base_path: str = "data") -> list[str]:
     )
 
 
-def _build_pipeline(subject: str) -> RAGPipeline:
+def _build_components(subject: str) -> tuple[RAGCore, AITutor]:
     """
-    指定された科目のRAGパイプラインを構築（またはキャッシュから復元）する。
+    指定された科目のRAGCoreとAITutorを構築（またはキャッシュから復元）する。
 
-    セッションステートにパイプラインを保持し、科目が変わった場合のみ再構築する。
+    セッションステートに保持し、科目が変わった場合のみ再構築する。
+
+    Returns:
+        (RAGCore, AITutor) のタプル
     """
     if (
-        "pipeline" in st.session_state
+        "rag_core" in st.session_state
+        and "ai_tutor" in st.session_state
         and st.session_state.get("pipeline_key") == subject
     ):
-        return st.session_state["pipeline"]
+        return st.session_state["rag_core"], st.session_state["ai_tutor"]
 
     with st.spinner(f"📚 {subject} のPDFを読み込み中... インデックスを構築しています"):
-        pipeline = RAGPipeline(subject)
+        rag_core = RAGCore(subject)
 
     # 読み込みスキップされたファイルがあればUIに警告
-    if pipeline._skipped_files:
-        skipped_list: str = "、".join(pipeline._skipped_files)
+    if rag_core._skipped_files:
+        skipped_list: str = "、".join(rag_core._skipped_files)
         st.warning(f"⚠️ 以下のファイルは読み込めませんでした: {skipped_list}")
 
-    st.session_state["pipeline"] = pipeline
+    # AITutorを初期化し、検索インデックスを共有
+    ai_tutor = AITutor(rag_core.get_client())
+    ai_tutor.set_search_index(
+        chunks=rag_core.get_chunks(),
+        embeddings=rag_core.get_embeddings(),
+        expand_query_fn=rag_core.expand_query,
+    )
+
+    st.session_state["rag_core"] = rag_core
+    st.session_state["ai_tutor"] = ai_tutor
     st.session_state["pipeline_key"] = subject
-    return pipeline
+    return rag_core, ai_tutor
 
 
 def _render_lobby() -> None:
@@ -132,7 +146,8 @@ def main() -> None:
         if st.button("🏠 科目を選び直す（ロビーへ）", use_container_width=True):
             # セッションをクリアしてロビーに戻る
             st.session_state["selected_subject"] = ""
-            st.session_state.pop("pipeline", None)
+            st.session_state.pop("rag_core", None)
+            st.session_state.pop("ai_tutor", None)
             st.session_state.pop("pipeline_key", None)
             st.rerun()
 
@@ -169,18 +184,18 @@ def main() -> None:
             label_visibility="collapsed",
         )
 
-    # ---- パイプライン初期化（科目名で構築） ----
-    pipeline: RAGPipeline = _build_pipeline(selected_subject)
+    # ---- コンポーネント初期化（科目名で構築） ----
+    rag_core, ai_tutor = _build_components(selected_subject)
 
     # ================================================================
     # モード分岐（各Viewモジュールにルーティング）
     # ================================================================
     if app_mode == "🔍 知識検索 (RAG)":
-        render_rag_mode(pipeline, debug_mode, top_k, style, length)
+        render_rag_mode(rag_core, debug_mode, top_k, style, length)
     elif app_mode == "🎓 模擬試験 (Feynman Drill)":
-        render_exam_mode(pipeline)
+        render_exam_mode(ai_tutor)
     else:
-        render_curriculum_mode(pipeline)
+        render_curriculum_mode(ai_tutor)
 
 
 if __name__ == "__main__":

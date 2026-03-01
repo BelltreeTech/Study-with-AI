@@ -7,7 +7,7 @@ data/ ディレクトリ内のPDFファイルを選択し、対話的に質問�
 import sys
 from pathlib import Path
 
-from src.rag_pipeline import RAGPipeline
+from src.core.rag_core import RAGCore
 
 
 # PDFデータディレクトリ
@@ -110,7 +110,7 @@ def main() -> None:
 
     # パイプライン初期化（PDF読み込み・インデックス構築）
     try:
-        pipeline = RAGPipeline(selected_paths)
+        pipeline = RAGCore(selected_paths)
     except Exception as e:
         print(f"エラー: パイプラインの初期化に失敗しました: {e}")
         sys.exit(1)

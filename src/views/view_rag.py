@@ -8,11 +8,11 @@ import streamlit as st
 from pathlib import Path
 import uuid
 
-from src.rag_pipeline import RAGPipeline
+from src.core.rag_core import RAGCore
 
 
 def render_rag_mode(
-    pipeline: RAGPipeline,
+    rag_core: RAGCore,
     debug_mode: bool,
     top_k: int,
     style: str,
@@ -48,7 +48,7 @@ def render_rag_mode(
         # RAG回答を生成
         with st.chat_message("assistant"):
             with st.spinner("🔍 検索・回答生成中..."):
-                result: dict = pipeline.query(prompt, top_k=top_k, style=style, length=length)
+                result: dict = rag_core.query(prompt, top_k=top_k, style=style, length=length)
 
             # デバッグモードON → 回答の上にテンソル演算ログを表示
             if debug_mode:

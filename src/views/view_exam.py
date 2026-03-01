@@ -7,32 +7,41 @@
 import streamlit as st
 from pathlib import Path
 
-from src.rag_pipeline import RAGPipeline
+from src.core.rag_core import RAGCore
+from src.core.ai_tutor import AITutor
 from src.progress import get_all_courses
 from src.config import PASS_SCORES
 
 
-def _build_pipeline(subject: str) -> RAGPipeline:
-    """模擬試験用のパイプライン構築（app.pyの_build_pipelineを呼び出す代替）。"""
+def _build_exam_pipeline(subject: str) -> tuple[RAGCore, AITutor]:
+    """模擬試験用のコンポーネント構築。"""
     if (
-        "pipeline" in st.session_state
-        and st.session_state.get("pipeline_key") == subject
+        "exam_rag_core" in st.session_state
+        and st.session_state.get("exam_pipeline_key") == subject
     ):
-        return st.session_state["pipeline"]
+        return st.session_state["exam_rag_core"], st.session_state["exam_ai_tutor"]
 
     with st.spinner(f"📚 {subject} のPDFを読み込み中... インデックスを構築しています"):
-        pipeline = RAGPipeline(subject)
+        rag_core = RAGCore(subject)
 
-    if pipeline._skipped_files:
-        skipped_list: str = "、".join(pipeline._skipped_files)
+    if rag_core._skipped_files:
+        skipped_list: str = "、".join(rag_core._skipped_files)
         st.warning(f"⚠️ 以下のファイルは読み込めませんでした: {skipped_list}")
 
-    st.session_state["pipeline"] = pipeline
-    st.session_state["pipeline_key"] = subject
-    return pipeline
+    ai_tutor = AITutor(rag_core.get_client())
+    ai_tutor.set_search_index(
+        chunks=rag_core.get_chunks(),
+        embeddings=rag_core.get_embeddings(),
+        expand_query_fn=rag_core.expand_query,
+    )
+
+    st.session_state["exam_rag_core"] = rag_core
+    st.session_state["exam_ai_tutor"] = ai_tutor
+    st.session_state["exam_pipeline_key"] = subject
+    return rag_core, ai_tutor
 
 
-def render_exam_mode(pipeline: RAGPipeline) -> None:
+def render_exam_mode(ai_tutor: AITutor) -> None:
     """模擬試験（Feynman Drill）モードのUI。"""
     st.title("🎓 Feynman Drill — 模擬試験モード")
     st.caption(
@@ -51,8 +60,8 @@ def render_exam_mode(pipeline: RAGPipeline) -> None:
         st.session_state["exam_subject"] = ""
     if "exam_difficulty" not in st.session_state:
         st.session_state["exam_difficulty"] = "Normal"
-    if "exam_pipeline" not in st.session_state:
-        st.session_state["exam_pipeline"] = None
+    if "exam_ai_tutor_extra" not in st.session_state:
+        st.session_state["exam_ai_tutor_extra"] = None
 
     # ---- 科目・難易度設定 ----
     st.subheader("⚙️ 試験設定")
@@ -61,7 +70,7 @@ def render_exam_mode(pipeline: RAGPipeline) -> None:
     # 科目一覧を取得（カリキュラムで登録済みのコース）
     all_courses: list[str] = get_all_courses()
     # 現在のパイプラインの科目もフォールバックとして含める
-    current_subject: str = getattr(pipeline, "_subject", "")
+    current_subject: str = ""  # app.pyから渡されたai_tutorには科目情報なし
     subject_options: list[str] = []
     if current_subject:
         subject_options.append(current_subject)
@@ -114,14 +123,14 @@ def render_exam_mode(pipeline: RAGPipeline) -> None:
     )
 
     # パイプライン切替: 選択科目が現在のパイプラインと異なる場合に再構築
-    active_pipeline: RAGPipeline = pipeline
+    active_tutor: AITutor = ai_tutor
     if selected_subject != current_subject:
         # 異なる科目が選択されている場合
         if (
-            st.session_state.get("exam_pipeline") is not None
+            st.session_state.get("exam_ai_tutor_extra") is not None
             and st.session_state.get("exam_pipeline_subject") == selected_subject
         ):
-            active_pipeline = st.session_state["exam_pipeline"]
+            active_tutor = st.session_state["exam_ai_tutor_extra"]
         # 注: 実際のパイプライン初期化は試験開始時に行う
 
     st.divider()
@@ -137,15 +146,15 @@ def render_exam_mode(pipeline: RAGPipeline) -> None:
         if not topic.strip():
             st.warning("トピックを入力してください。")
         else:
-            # 科目が異なる場合はパイプラインを初期化
+            # 科目が異なる場合はコンポーネントを初期化
             if selected_subject != current_subject:
                 with st.spinner(f"📚 {selected_subject} のインデックスを構築中..."):
-                    active_pipeline = _build_pipeline(selected_subject)
-                st.session_state["exam_pipeline"] = active_pipeline
+                    _, active_tutor = _build_exam_pipeline(selected_subject)
+                st.session_state["exam_ai_tutor_extra"] = active_tutor
                 st.session_state["exam_pipeline_subject"] = selected_subject
 
             with st.spinner(f"📚 {difficulty_descriptions[selected_difficulty]} の問題を生成中..."):
-                quiz_result: dict = active_pipeline.generate_quiz(
+                quiz_result: dict = active_tutor.generate_quiz(
                     topic.strip(), difficulty=selected_difficulty
                 )
             st.session_state["quiz_question"] = quiz_result["question_text"]
@@ -178,13 +187,13 @@ def render_exam_mode(pipeline: RAGPipeline) -> None:
             if not user_answer.strip():
                 st.warning("回答を入力してください。")
             else:
-                # 採点用パイプラインを取得
-                grading_pipeline: RAGPipeline = st.session_state.get("exam_pipeline") or pipeline
+                # 採点用チューターを取得
+                grading_tutor: AITutor = st.session_state.get("exam_ai_tutor_extra") or ai_tutor
                 ref_context: str = "\n\n---\n\n".join(
                     chunk["text"] for chunk in st.session_state["quiz_ref_chunks"]
                 )
                 with st.spinner("🧑‍🏫 教授が採点中..."):
-                    grading: dict = grading_pipeline.grade_answer(
+                    grading: dict = grading_tutor.grade_answer(
                         question=st.session_state["quiz_question"],
                         user_answer=user_answer.strip(),
                         reference_context=ref_context,

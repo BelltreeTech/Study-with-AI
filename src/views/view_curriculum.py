@@ -11,7 +11,7 @@ import re
 
 from streamlit_mermaid import st_mermaid
 
-from src.rag_pipeline import RAGPipeline
+from src.core.ai_tutor import AITutor
 from src.progress import (
     save_course_progress,
     load_course_progress,
@@ -65,7 +65,7 @@ def render_lecture_content(text: str) -> None:
         st.markdown(remaining_text)
 
 
-def render_curriculum_mode(pipeline: RAGPipeline) -> None:
+def render_curriculum_mode(ai_tutor: AITutor) -> None:
     """カリキュラム学習モードのUI（複数コース対応）。"""
 
     # session_state 初期化
@@ -85,12 +85,12 @@ def render_curriculum_mode(pipeline: RAGPipeline) -> None:
     active_course: str = st.session_state["active_course"]
 
     if active_course:
-        _render_course_view(pipeline, active_course)
+        _render_course_view(ai_tutor, active_course)
     else:
-        _render_dashboard(pipeline)
+        _render_dashboard(ai_tutor)
 
 
-def _render_dashboard(pipeline: RAGPipeline) -> None:
+def _render_dashboard(ai_tutor: AITutor) -> None:
     """コースダッシュボード: 受講中コース一覧 + 新規コース追加。"""
     st.title("🏫 カリキュラム学習")
     st.caption("複数のトピックを並行して体系的に学習できます。")
@@ -161,7 +161,7 @@ def _render_dashboard(pipeline: RAGPipeline) -> None:
             st.warning(f"「{topic_stripped}」はすでに登録されています。「再開する」で学習を続けてください。")
         else:
             with st.spinner("🎓 カリキュラムを設計中..."):
-                result: list[dict] = pipeline.generate_curriculum(topic_stripped)
+                result: list[dict] = ai_tutor.generate_curriculum(topic_stripped)
             if result:
                 save_course_progress(topic_stripped, result, 0)
                 _activate_course(topic_stripped)
@@ -206,7 +206,7 @@ def _save_current_course() -> None:
         )
 
 
-def _render_course_view(pipeline: RAGPipeline, course_name: str) -> None:
+def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
     """選択されたコースの学習画面（シラバス・講義・試験）。"""
     curriculum: list[dict] = st.session_state["curriculum"]
     current_idx: int = st.session_state["current_chapter_index"]
@@ -310,7 +310,7 @@ def _render_course_view(pipeline: RAGPipeline, course_name: str) -> None:
                 use_container_width=True,
             ):
                 with st.spinner("📝 大学院レベルの講義ノートを生成中...（3000文字以上の詳細版）"):
-                    result: dict = pipeline.generate_lecture(ch_title, ch_desc)
+                    result: dict = ai_tutor.generate_lecture(ch_title, ch_desc)
                 st.session_state["current_lecture"] = result
                 curriculum[current_idx]["lecture_content"] = result
                 st.session_state["curriculum"] = curriculum
@@ -370,7 +370,7 @@ def _render_course_view(pipeline: RAGPipeline, course_name: str) -> None:
 
                     # 教授の応答を生成
                     with st.spinner("🧙 教授が思考中..."):
-                        reply: str = pipeline.run_socratic_dialogue(
+                        reply: str = ai_tutor.run_socratic_dialogue(
                             lecture_content=lecture_text,
                             chat_history=chat_history[:-1],  # 最新のuser入力は別途渡す
                             user_input=user_input,
@@ -414,7 +414,7 @@ def _render_course_view(pipeline: RAGPipeline, course_name: str) -> None:
                         use_container_width=True,
                     ):
                         with st.spinner("🎓 講義内容に基づいて修了試験を出題中..."):
-                            quiz_result: dict = pipeline.generate_quiz(
+                            quiz_result: dict = ai_tutor.generate_quiz(
                                 ch_title,
                                 lecture_content=exam_lecture_text,
                             )
@@ -442,7 +442,7 @@ def _render_course_view(pipeline: RAGPipeline, course_name: str) -> None:
                                     c["text"] for c in st.session_state["exam_ref_chunks"]
                                 )
                                 with st.spinner("🧑‍🏫 鬼採点モードで採点中..."):
-                                    grading: dict = pipeline.grade_answer(
+                                    grading: dict = ai_tutor.grade_answer(
                                         question=exam_question,
                                         user_answer=exam_answer.strip(),
                                         reference_context=ref_context,
