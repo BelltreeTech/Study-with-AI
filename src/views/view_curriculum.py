@@ -20,6 +20,7 @@ from src.progress import (
     get_course_summary,
     set_last_active_course,
 )
+from src.config import PASS_SCORE_NORMAL
 
 # Mermaidコードブロック検出用の正規表現
 k_mermaidPattern = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL)
@@ -450,7 +451,7 @@ def _render_course_view(pipeline: RAGPipeline, course_name: str) -> None:
                                 st.rerun()
                     else:
                         score: int = exam_grading["score"]
-                        passed: bool = score >= 90
+                        passed: bool = score >= PASS_SCORE_NORMAL
 
                         if passed:
                             st.success(f"🏆 合格！ スコア: **{score} / 100 点**")

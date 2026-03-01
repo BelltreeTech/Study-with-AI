@@ -4,6 +4,8 @@
 ページ単位のテキストを、RAG用の固定サイズチャンク（オーバーラップ付き）に分割する。
 """
 
+from src.config import CHUNK_SIZE, CHUNK_OVERLAP
+
 
 def _find_split_point(text: str, target_pos: int) -> int:
     """
@@ -27,8 +29,8 @@ def _find_split_point(text: str, target_pos: int) -> int:
 
 def chunk_text(
     pages: list[dict],
-    chunk_size: int = 500,
-    overlap: int = 100,
+    chunk_size: int = CHUNK_SIZE,
+    overlap: int = CHUNK_OVERLAP,
 ) -> list[dict]:
     """
     ページ群のテキストをチャンクに分割する。

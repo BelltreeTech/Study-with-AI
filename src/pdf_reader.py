@@ -16,8 +16,10 @@ try:
 except ImportError:
     _ocr_available = False
 
+from src.config import OCR_TEXT_THRESHOLD
+
 # 画像PDFと判断するテキスト文字数の閾値
-k_ocrThreshold = 50
+k_ocrThreshold: int = OCR_TEXT_THRESHOLD
 
 
 def extract_text_from_pdf(pdf_path: str) -> list[dict]:

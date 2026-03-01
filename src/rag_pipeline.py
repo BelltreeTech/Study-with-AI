@@ -19,10 +19,27 @@ from src.embedder import (
 from src.pdf_reader import extract_text_from_pdf
 from src.text_chunker import chunk_text
 from src.vector_search import search
-
-
-# LLM応答生成に使用するモデル
-k_llmModel = "gpt-4o-mini"
+from src.config import (
+    LLM_MODEL,
+    TEMPERATURE_QUERY_EXPANSION,
+    MAX_TOKENS_QUERY_EXPANSION,
+    TEMPERATURE_RAG_ANSWER,
+    MAX_TOKENS_RAG_ANSWER,
+    TEMPERATURE_QUIZ,
+    MAX_TOKENS_QUIZ,
+    TEMPERATURE_GRADING,
+    MAX_TOKENS_GRADING,
+    TEMPERATURE_SOCRATIC,
+    MAX_TOKENS_SOCRATIC,
+    SOCRATIC_HISTORY_LIMIT,
+    SOCRATIC_CONTEXT_LIMIT,
+    TEMPERATURE_CURRICULUM,
+    MAX_TOKENS_CURRICULUM,
+    TEMPERATURE_LECTURE,
+    MAX_TOKENS_LECTURE,
+    QUIZ_TOP_K,
+    LECTURE_TOP_K,
+)
 
 
 class RAGPipeline:
@@ -146,13 +163,13 @@ class RAGPipeline:
 
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": expansion_prompt},
                     {"role": "user", "content": question},
                 ],
-                temperature=0.0,
-                max_tokens=200,
+                temperature=TEMPERATURE_QUERY_EXPANSION,
+                max_tokens=MAX_TOKENS_QUERY_EXPANSION,
             )
             expanded: str = response.choices[0].message.content or question
             return expanded.strip()
@@ -292,13 +309,13 @@ class RAGPipeline:
         t_llm_start: float = time.time()
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.3,
-                max_tokens=1024,
+                temperature=TEMPERATURE_RAG_ANSWER,
+                max_tokens=MAX_TOKENS_RAG_ANSWER,
                 logprobs=True,
                 top_logprobs=1,
             )
@@ -401,7 +418,7 @@ class RAGPipeline:
             expanded_topic: str = self._expand_query(topic_text)
             topic_embedding: np.ndarray = generate_embeddings([expanded_topic])[0]
             search_result: dict = search(
-                topic_embedding, self._embeddings, self._chunks, top_k=3
+                topic_embedding, self._embeddings, self._chunks, top_k=QUIZ_TOP_K
             )
             results: list[tuple[dict, float]] = search_result["results"]
             context_parts: list[str] = []
@@ -422,7 +439,7 @@ class RAGPipeline:
             expanded_topic = self._expand_query(topic_text)
             topic_embedding = generate_embeddings([expanded_topic])[0]
             search_result = search(
-                topic_embedding, self._embeddings, self._chunks, top_k=3
+                topic_embedding, self._embeddings, self._chunks, top_k=QUIZ_TOP_K
             )
             results = search_result["results"]
             context_parts = []
@@ -526,13 +543,13 @@ class RAGPipeline:
 
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": final_system_prompt},
                     {"role": "user", "content": quiz_user_prompt},
                 ],
-                temperature=0.7,
-                max_tokens=3000,
+                temperature=TEMPERATURE_QUIZ,
+                max_tokens=MAX_TOKENS_QUIZ,
             )
             question_text: str = response.choices[0].message.content or "（問題を生成できませんでした）"
         except Exception as e:
@@ -645,13 +662,13 @@ class RAGPipeline:
 
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": grading_system_prompt},
                     {"role": "user", "content": grading_user_prompt},
                 ],
-                temperature=0.3,
-                max_tokens=3000,
+                temperature=TEMPERATURE_GRADING,
+                max_tokens=MAX_TOKENS_GRADING,
             )
             feedback_text: str = response.choices[0].message.content or "（採点結果を生成できませんでした）"
         except Exception as e:
@@ -710,13 +727,13 @@ class RAGPipeline:
             "- 必ず1つ以上の問いかけを含める。\n"
             "- 数式が必要なら LaTeX ($...$, $$...$$) を使用。\n"
             "- 日本語で応答すること。\n\n"
-            f"【講義内容（議論の根拠）】\n\n{lecture_content[:3000]}"
+            f"【講義内容（議論の根拠）】\n\n{lecture_content[:SOCRATIC_CONTEXT_LIMIT]}"
         )
 
         # メッセージ構築
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        # 直近の議論履歴を追加（トークン制限のため最大20件）
-        for msg in chat_history[-20:]:
+        # 直近の議論履歴を追加（トークン制限のため最大件数を制限）
+        for msg in chat_history[-SOCRATIC_HISTORY_LIMIT:]:
             messages.append({
                 "role": msg["role"],
                 "content": msg["content"],
@@ -725,10 +742,10 @@ class RAGPipeline:
 
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1024,
+                temperature=TEMPERATURE_SOCRATIC,
+                max_tokens=MAX_TOKENS_SOCRATIC,
             )
             reply: str = response.choices[0].message.content or "（応答を生成できませんでした）"
         except Exception as e:
@@ -768,13 +785,13 @@ class RAGPipeline:
 
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": curriculum_prompt},
                     {"role": "user", "content": f"トピック: {topic}"},
                 ],
-                temperature=0.7,
-                max_tokens=1024,
+                temperature=TEMPERATURE_CURRICULUM,
+                max_tokens=MAX_TOKENS_CURRICULUM,
             )
             raw_text: str = response.choices[0].message.content or "[]"
             # JSON部分を抽出（LLMが余計なテキストを付けた場合への防御）
@@ -811,7 +828,7 @@ class RAGPipeline:
         expanded_query: str = self._expand_query(search_query)
         query_embedding: np.ndarray = generate_embeddings([expanded_query])[0]
         search_result: dict = search(
-            query_embedding, self._embeddings, self._chunks, top_k=10
+            query_embedding, self._embeddings, self._chunks, top_k=LECTURE_TOP_K
         )
         results: list[tuple[dict, float]] = search_result["results"]
 
@@ -876,13 +893,13 @@ class RAGPipeline:
 
         try:
             response = self._client.chat.completions.create(
-                model=k_llmModel,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": lecture_system_prompt},
                     {"role": "user", "content": lecture_user_prompt},
                 ],
-                temperature=0.4,
-                max_tokens=8000,
+                temperature=TEMPERATURE_LECTURE,
+                max_tokens=MAX_TOKENS_LECTURE,
             )
             lecture_text: str = response.choices[0].message.content or "（講義の生成に失敗しました）"
         except Exception as e:

@@ -14,13 +14,16 @@ import numpy as np
 from openai import OpenAI
 
 # キャッシュディレクトリ
-k_cacheDir = Path("cache")
+from src.config import CACHE_DIR, EMBEDDING_MODEL, EMBEDDING_BATCH_SIZE
 
-# Embeddingモデル
-k_embeddingModel = "text-embedding-3-small"
+# Embeddingキャッシュ保存ディレクトリ
+k_cacheDir: Path = CACHE_DIR
 
-# バッチサイズ（APIの制限に合わせる）
-k_batchSize = 100
+# 使用するEmbeddingモデル
+k_embeddingModel: str = EMBEDDING_MODEL
+
+# Embedding生成のバッチサイズ
+k_batchSize: int = EMBEDDING_BATCH_SIZE
 
 
 def _get_client() -> OpenAI:

@@ -16,7 +16,9 @@ import json
 from pathlib import Path
 
 # 保存先ディレクトリとファイル
-k_progressDir = Path("user_data")
+from src.config import USER_DATA_DIR
+
+k_progressDir: Path = USER_DATA_DIR
 k_progressFile = k_progressDir / "progress.json"
 
 

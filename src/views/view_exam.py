@@ -9,6 +9,7 @@ from pathlib import Path
 
 from src.rag_pipeline import RAGPipeline
 from src.progress import get_all_courses
+from src.config import PASS_SCORES
 
 
 def _build_pipeline(subject: str) -> RAGPipeline:
@@ -105,8 +106,7 @@ def render_exam_mode(pipeline: RAGPipeline) -> None:
     st.session_state["exam_difficulty"] = selected_difficulty
 
     # 難易度に応じた合格ラインを表示
-    pass_lines: dict[str, int] = {"Easy": 70, "Normal": 90, "Hard": 95}
-    pass_line: int = pass_lines.get(selected_difficulty, 90)
+    pass_line: int = PASS_SCORES.get(selected_difficulty, 90)
     st.info(
         f"**科目:** {selected_subject}　|　"
         f"**難易度:** {difficulty_descriptions[selected_difficulty]}　|　"
