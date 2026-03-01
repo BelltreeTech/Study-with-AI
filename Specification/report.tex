@@ -1,0 +1,427 @@
+% ==============================================
+%  SFC Self-Directed Study Report
+%  Author: Shinri Suzuki (J0220)
+% ==============================================
+
+% 1. Document Class
+\documentclass[uplatex, dvipdfmx, a4paper, 11pt]{jsarticle}
+
+% ----------------------------------------------
+%  2. Packages
+% ----------------------------------------------
+\usepackage[top=25truemm,bottom=25truemm,left=25truemm,right=25truemm]{geometry}
+\usepackage{amsmath, amssymb, mathtools, bm}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{float}
+\usepackage[dvipdfmx, bookmarks=true, setpagesize=false, colorlinks=true, linkcolor=black, urlcolor=blue, citecolor=black]{hyperref}
+\usepackage{pxjahyper}
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Code Style Definition
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single
+}
+\lstset{style=mystyle}
+
+% ----------------------------------------------
+%  3. Metadata
+% ----------------------------------------------
+\title{深層学習の数理的基盤の習得と、自律型学習支援システムの構築\\
+\large ―「ゼロから作るDeep Learning」の実践としてのRAG開発―}
+\author{慶應義塾大学 総合政策学部 2026年度入学者\\
+受験番号 J0220 \quad 氏名 鈴木 真理}
+\date{2026年3月4日}
+
+% ==============================================
+%  The World Begins Here
+% ==============================================
+\begin{document}
+
+% ==============================================
+%  Abstract Page
+% ==============================================
+\begin{center}
+    {\Large \textbf{自主課題レポート：概要}} \\[5mm]
+    {\large \textbf{深層学習の数理的基盤の習得と、自律型学習支援システムの構築}} \\[2mm]
+    {\large \textbf{―「ゼロから作るDeep Learning」の実践としてのRAG開発―}} \\[5mm]
+    {\large 総合政策学部 2026年度入学者 \quad J0220 \quad 鈴木 真理} \\[2mm]
+    \rule{\textwidth}{0.4mm}
+\end{center}
+
+\thispagestyle{empty}
+
+\section*{要旨}
+本稿は、深層学習の数理的基盤の習得と、
+その知識を応用した自律型学習支援システムの開発という
+二段階の学修プロセスを報告するものである。
+
+第一段階として、『ゼロから作るDeep Learning』を精読し、
+NumPyのみを用いてニューラルネットワークの順伝播・逆伝播を実装した。
+計算グラフ上での連鎖律の適用、行列形状の整合、
+勾配降下法のパラメータ更新といった低レイヤーの操作を
+自らの手で記述することで、フレームワークに隠蔽された数理構造を身体的に理解した。
+
+第二段階として、習得した知識を「消費」するだけでなく
+「生産」に転換するため、Retrieval-Augmented Generation（RAG）技術を用いた
+学習支援システム「SFC Polymath」を開発した。
+Embeddingによるベクトル表現、コサイン類似度に基づくTop-K検索、
+OCRによる画像PDF対応、ソクラテス式対話による思考誘導、
+そして合格ライン90点の厳格な修了試験を統合し、
+AIを「答えを教える道具」ではなく「問いを投げかける教授」として機能させた。
+
+理論を学び、理論を使って道具を作り、その道具でさらに学ぶ。
+この再帰的な学習サイクルこそが、本課題の核心である。
+
+\vfill
+\clearpage
+
+% ==============================================
+%  Main Body
+% ==============================================
+\setcounter{page}{1}
+
+% ==============================================================
+\section{序論}
+% ==============================================================
+
+\subsection{背景}
+2020年代、AIは民主化された。
+誰もがAPIを叩けば画像を生成でき、チャットボットと会話できる。
+しかし、その容易さの裏には深刻な問題が潜む。
+中身を理解せずに医療や教育に応用すれば、
+ブラックボックスの出力を盲信する構造が生まれる。
+私が構想する医療AIプロジェクト「Polaris」において、
+推論過程の透明性と安全性は核心的価値であり、
+AIを「使う側」から「作る側」に回ることは、倫理的な前提条件である。
+
+加えて、SFCでの学びに向けて膨大な専門書が入手可能となったものの、
+それらを効率的に消化し、体系化する仕組みが存在しなかった。
+特に、スキャンされた画像PDFはテキスト検索すらできず、
+「読めるが検索できない知識」が増え続けていた。
+
+\subsection{目的}
+本課題の目的は、以下の二軸で構成される。
+
+\begin{enumerate}
+    \item \textbf{理論的基盤の習得}：NumPyのみを用いた
+          ニューラルネットワークの実装を通じて、
+          深層学習の数理構造を低レイヤーで理解すること。
+    \item \textbf{応用的実践}：習得した知識（ベクトル表現、
+          内積計算、勾配）を活用し、自律型学習支援システムを構築すること。
+\end{enumerate}
+
+目標は、「理論を学ぶ → 理論で道具を作る → 道具でさらに学ぶ」
+という再帰的サイクルを実証することにある。
+
+
+% ==============================================================
+\section{理論編 ―NumPyによるゼロからの実装―}
+% ==============================================================
+
+\subsection{計算グラフと連鎖律}
+ニューラルネットワークの学習とは、
+損失関数 $L(\bm{W})$ を最小化する重みパラメータ $\bm{W}$ の探索に他ならない。
+勾配降下法における更新則は以下のように定式化される。
+
+\begin{equation}
+    \bm{W} \leftarrow \bm{W} - \eta \frac{\partial L}{\partial \bm{W}}
+    \label{eq:gradient_descent}
+\end{equation}
+
+ここで $\eta$ は学習率である。
+式(\ref{eq:gradient_descent})における勾配 $\partial L / \partial \bm{W}$ を
+効率的に計算するため、計算グラフ上での連鎖律（Chain Rule）を適用する。
+
+合成関数 $z = f(g(x))$ に対し、
+連鎖律は以下のように微分の伝播を記述する。
+\begin{equation}
+    \frac{\partial z}{\partial x} = \frac{\partial z}{\partial g} \cdot \frac{\partial g}{\partial x}
+    \label{eq:chain_rule}
+\end{equation}
+
+ニューラルネットワークでは、各レイヤが合成関数の一段階に対応し、
+出力層から入力層へ向かって勾配を逆方向に伝播させる。
+これが誤差逆伝播法（Backpropagation）の本質であり、
+計算グラフという構造を理解して初めて、
+その「なぜ動くのか」が腑に落ちる。
+
+\subsection{Affineレイヤの実装}
+理論を「わかった気になる」ことと、
+実際にコードとして動かすことの間には深い溝がある。
+以下に、NumPyのみで実装したAffineレイヤを示す。
+
+\begin{lstlisting}[language=Python, caption=Affine Layer Implementation, label=code:affine]
+import numpy as np
+
+class Affine:
+    def __init__(self, W, b):
+        self.W = W  # Weight matrix
+        self.b = b  # Bias vector
+        self.x = None
+        self.dW = None
+        self.db = None
+
+    def forward(self, x):
+        self.x = x
+        out = np.dot(x, self.W) + self.b
+        return out
+
+    def backward(self, dout):
+        dx = np.dot(dout, self.W.T)
+        self.dW = np.dot(self.x.T, dout)
+        self.db = np.sum(dout, axis=0)
+        return dx
+\end{lstlisting}
+
+コード\ref{code:affine}において、
+\texttt{forward} は入力 $\bm{x}$ と重み $\bm{W}$ の行列積にバイアス $\bm{b}$ を加算する。
+\texttt{backward} では、上流から伝播してきた勾配 \texttt{dout} を受け取り、
+転置行列 $\bm{W}^\top$ との積により下流への勾配を計算する。
+
+この実装で最も苦労したのは、行列の\textbf{形状（Shape）}の整合である。
+バグの9割は次元不一致に起因し、
+NumPyのブロードキャストが暗黙的に形状を変換してしまうため、
+逆伝播時に \texttt{np.sum(dout, axis=0)} を忘れるという典型的な罠に何度もはまった。
+
+しかし、この「苦痛」こそが学びであった。
+PyTorchやTensorFlowが自動微分で隠蔽している処理を
+一行一行書くことで、行列演算の「身体的感覚」を獲得した。
+数式(\ref{eq:chain_rule})の連鎖律が、コードの中でどう流れるか---
+それを指先で知ることが、ブラックボックスからの脱却そのものである。
+
+
+% ==============================================================
+\section{実践編 ―自律型学習システム「Polymath」の開発―}
+% ==============================================================
+
+\subsection{理論から実践への橋渡し}
+第2章で学んだ数理的知識は、それ自体としては完結した学びである。
+しかし、ある問いが生まれた。
+「この知識を、今後の学習をさらに加速させるために使えないか？」
+
+ニューラルネットワークの学習で理解した「ベクトル表現」と
+「高次元空間上の距離計算」は、
+そのまま自然言語処理における\textbf{Embedding}と
+\textbf{コサイン類似度}の概念に接続する。
+
+\begin{equation}
+    \text{sim}(\bm{q}, \bm{d}) = \frac{\bm{q} \cdot \bm{d}}{\|\bm{q}\| \cdot \|\bm{d}\|}
+    = \cos\theta
+    \label{eq:cosine_sim}
+\end{equation}
+
+式(\ref{eq:cosine_sim})に示すコサイン類似度は、
+二つのベクトル $\bm{q}$（クエリ）と $\bm{d}$（ドキュメント）の
+意味的近接性を測る尺度として、
+検索システムの根幹を担う。
+
+NumPyでの行列演算を手書きした経験があったからこそ、
+1536次元のEmbeddingベクトル同士の内積計算が
+「何をしているのか」を直感的に理解し、
+最適化（バッチ処理、ノルム正規化）の方針を自ら立てることができた。
+
+\subsection{システム概要}
+この着想のもと、RAG（Retrieval-Augmented Generation）技術を用いた
+学習支援システム「SFC Polymath」を開発した。
+主要な技術スタックは以下の通りである。
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{要素} & \textbf{技術} \\
+\hline
+言語 & Python 3.12 \\
+UI & Streamlit \\
+LLM & OpenAI GPT-4o-mini \\
+Embedding & text-embedding-3-small (1536次元) \\
+PDF処理 & PyMuPDF + Tesseract OCR \\
+図解 & Mermaid.js \\
+\hline
+\end{tabular}
+\caption{技術スタック}
+\label{tab:stack}
+\end{table}
+
+ユーザーがPDFを \texttt{data/} フォルダに配置するだけで、
+テキスト抽出、チャンク分割、Embedding生成が自動実行され、
+ベクトル検索可能な知識基盤が構築される。
+
+\subsection{技術的接続：ベクトル検索の実装}
+RAGパイプラインの検索部は、
+以下のようにNumPyの内積計算で実装されている。
+
+\begin{lstlisting}[language=Python, caption=Vector Search via Dot Product, label=code:search]
+import numpy as np
+
+def search(query_embedding, all_embeddings,
+           chunks, top_k=5):
+    # Dot product = cosine similarity
+    # (vectors are L2-normalized)
+    similarities = np.dot(
+        all_embeddings, query_embedding
+    )
+
+    # Top-K extraction
+    top_indices = np.argsort(similarities)[::-1][:top_k]
+
+    results = []
+    for idx in top_indices:
+        results.append(
+            (chunks[idx], float(similarities[idx]))
+        )
+    return {"results": results}
+\end{lstlisting}
+
+コード\ref{code:search}は、
+第2章で学んだ \texttt{np.dot} による行列演算そのものである。
+Affineレイヤの順伝播で $\bm{x} \cdot \bm{W}$ を計算したのと同じ操作が、
+ここでは「質問と知識チャンクの意味的距離」の計算に使われている。
+
+この接続は、私にとって決定的な体験であった。
+教科書の中の数式が、自分の作るアプリケーションの心臓部で動いている。
+理論と実践が、\texttt{np.dot} という一行の関数呼び出しで繋がった瞬間であった。
+
+\subsection{OCRによる「眼」の獲得}
+スキャンされた画像PDFはテキストレイヤを持たない。
+PyMuPDFで抽出されるテキスト量が50文字以下の場合、
+Tesseract OCR（日本語＋英語）による強制テキスト化を発動するロジックを実装した。
+
+\begin{lstlisting}[language=Python, caption=OCR Fallback Logic, label=code:ocr]
+def extract_text_from_pdf(pdf_path):
+    pages = _extract_with_pymupdf(pdf_path)
+    total_chars = sum(len(p["text"]) for p in pages)
+
+    if total_chars > 50:  # enough text
+        return pages
+
+    # Fallback: OCR with Tesseract
+    ocr_pages = _extract_with_ocr(pdf_path)
+    return ocr_pages if ocr_pages else pages
+\end{lstlisting}
+
+この二段階方式により、テキストPDFには高速処理を、
+画像PDFにはOCR処理を適用する最適な分岐が実現される。
+畳み込みニューラルネットワーク（CNN）の原理を学んだことで、
+画像認識の計算コストと精度のトレードオフを理解した上での設計判断が可能となった。
+
+\subsection{ソクラテス・メソッドによる対話機能}
+本システムの教育哲学は、「答えを教えない」ことにある。
+学習者が講義内容について質問すると、
+AI教授は答える代わりに「なぜそう思うのか？」「その定義の根拠は？」と問い返す。
+
+この機能は、損失関数を最小化する\textbf{勾配降下法}と本質的に同型である。
+学習者の理解の「誤差」を検出し、
+問い返し（フィードバック）によって理解のパラメータを修正していく。
+NN（ニューラルネットワーク）の学習と人間の学習が、
+同じ構造で記述できることの美しさに、開発を通じて気づかされた。
+
+
+% ==============================================================
+\section{評価と考察}
+% ==============================================================
+
+\subsection{理論理解がもたらした実装上の利点}
+NumPyによる低レイヤー実装の経験は、
+RAGシステムの開発において以下の具体的な利点をもたらした。
+
+\begin{enumerate}
+    \item \textbf{Embeddingの直感的理解}：
+          1536次元のベクトルが「意味の座標」であるという理解は、
+          行列演算を手で書いた経験なしには得られなかった。
+          検索精度が低い場合に「ベクトル空間上で何が起きているか」を
+          推論できるようになった。
+
+    \item \textbf{ハルシネーションの原因推測}：
+          LLMが事実と異なる回答を生成する「幻覚」の背後には、
+          重み行列の確率的振る舞いがある。
+          Softmax関数の性質や温度パラメータの効果を理論的に理解しているため、
+          \texttt{temperature=0.4}（講義生成時）と
+          \texttt{temperature=0.7}（試験生成時）の
+          使い分けが「勘」ではなく「設計」として行えた。
+
+    \item \textbf{デバッグ能力}：
+          行列のShape不一致と格闘した経験は、
+          Embedding次元やバッチサイズの不整合を即座に検出する力になった。
+\end{enumerate}
+
+\subsection{「作ることで学ぶ」の効果}
+本課題を通じて、Learning by Making（構成主義的学習）の効果を実感した。
+教科書を読んで「わかった」と感じた知識の多くは、
+実装段階で再び「わからない」に転落する。
+しかし、その転落と再理解の繰り返しこそが、
+概念の定着を圧倒的に加速させる。
+
+特に、理論編で「高次元ベクトルの内積は意味的類似度を表す」と学んだことを、
+実践編で実際に検索システムとして動かし、
+検索結果の精度を自分の目で確認できたとき、
+理解は「知識」から「確信」に変わった。
+
+
+% ==============================================================
+\section{結論}
+% ==============================================================
+
+本課題では、以下の二段階の学修プロセスを実行した。
+
+\begin{enumerate}
+    \item 『ゼロから作るDeep Learning』の精読とNumPyによる実装を通じて、
+          深層学習の数理的基盤（行列演算、連鎖律、勾配降下法）を習得した。
+    \item 習得した知識を応用し、RAG技術を核とした
+          自律型学習支援システム「SFC Polymath」を開発した。
+\end{enumerate}
+
+このプロセスを通じて得た最大の収穫は、
+\textbf{ブラックボックスを開ける鍵}を手に入れたことである。
+その鍵とは、数学と、数学をコードに翻訳する能力である。
+
+数式(\ref{eq:gradient_descent})の勾配降下法は、
+コード\ref{code:affine}では \texttt{backward} メソッドとして実装され、
+コード\ref{code:search}では検索精度の最適化に応用された。
+一つの数学的原理が、異なる文脈で繰り返し姿を変えて現れる。
+この構造を見抜く力こそが、SFCで目指す問題発見・解決能力の基盤となる。
+
+SFC入学後は、本システム「Polymath」を相棒として、
+さらに高度な学習に取り組む。
+特に、構想するProject Polaris（医療AI）の実装において、
+本課題で培った「理論→実装→応用」のサイクルを回し続ける所存である。
+
+「車輪の再発明」は無駄ではない。
+車輪の構造を知る者だけが、より速い車輪を作れる。
+そして、車輪を理解した者が次に作るべきは、車輪を作る\textbf{工場}である。
+SFC Polymathは、その工場の最初の設計図である。
+
+\begin{thebibliography}{9}
+  \bibitem{saito1} 斎藤康毅, 『ゼロから作るDeep Learning ―Pythonで学ぶディープラーニングの理論と実装』, オライリー・ジャパン, 2016.
+  \bibitem{goodfellow} Ian Goodfellow, Yoshua Bengio, and Aaron Courville, \textit{Deep Learning}, MIT Press, 2016.
+  \bibitem{lewis2020} Patrick Lewis et al., ``Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks'', \textit{NeurIPS}, 2020.
+  \bibitem{openai_embedding} OpenAI, ``Embeddings --- OpenAI API Documentation'', 2024.
+  \bibitem{streamlit} Streamlit Inc., ``Streamlit --- A faster way to build and share data apps'', \url{https://streamlit.io/}, 2024.
+  \bibitem{tesseract} Ray Smith, ``An Overview of the Tesseract OCR Engine'', \textit{ICDAR}, 2007.
+  \bibitem{ao_guide} 慶應義塾大学SFC, ``AO入試 入学手続者の自主課題について'', 2025.
+\end{thebibliography}
+
+\end{document}
