@@ -23,9 +23,7 @@ def render_rag_mode(
     st.title("📖 まりによるRAG System")
     st.caption("NumPyベースのベクトル検索（スクラッチ実装）によるPDF質問応答")
 
-    # チャット履歴の初期化
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = []
+    # チャット履歴はstate_managerで初期化済み
 
     # 既存のチャット履歴を表示
     for message in st.session_state["messages"]:

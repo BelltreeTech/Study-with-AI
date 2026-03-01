@@ -68,19 +68,7 @@ def render_lecture_content(text: str) -> None:
 def render_curriculum_mode(ai_tutor: AITutor) -> None:
     """カリキュラム学習モードのUI（複数コース対応）。"""
 
-    # session_state 初期化
-    if "active_course" not in st.session_state:
-        st.session_state["active_course"] = ""
-    if "curriculum" not in st.session_state:
-        st.session_state["curriculum"] = []
-    if "current_chapter_index" not in st.session_state:
-        st.session_state["current_chapter_index"] = 0
-    if "current_lecture" not in st.session_state:
-        st.session_state["current_lecture"] = None
-    if "lecture_chat_history" not in st.session_state:
-        st.session_state["lecture_chat_history"] = []
-    if "lecture_chat_chapter_idx" not in st.session_state:
-        st.session_state["lecture_chat_chapter_idx"] = -1
+    # session_state はstate_managerで初期化済み
 
     active_course: str = st.session_state["active_course"]
 
@@ -393,12 +381,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
             if is_viewing_current and not is_viewing_completed:
                 st.divider()
 
-                if "exam_question" not in st.session_state:
-                    st.session_state["exam_question"] = ""
-                if "exam_ref_chunks" not in st.session_state:
-                    st.session_state["exam_ref_chunks"] = []
-                if "exam_grading_result" not in st.session_state:
-                    st.session_state["exam_grading_result"] = None
+                # exam_*ステートはstate_managerで初期化済み
 
                 exam_question: str = st.session_state["exam_question"]
                 exam_grading: dict | None = st.session_state["exam_grading_result"]

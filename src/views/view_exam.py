@@ -49,19 +49,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
         "あなたの理解度をテストしましょう！"
     )
 
-    # session_state 初期化
-    if "quiz_question" not in st.session_state:
-        st.session_state["quiz_question"] = ""
-    if "quiz_ref_chunks" not in st.session_state:
-        st.session_state["quiz_ref_chunks"] = []
-    if "quiz_grading_result" not in st.session_state:
-        st.session_state["quiz_grading_result"] = None
-    if "exam_subject" not in st.session_state:
-        st.session_state["exam_subject"] = ""
-    if "exam_difficulty" not in st.session_state:
-        st.session_state["exam_difficulty"] = "Normal"
-    if "exam_ai_tutor_extra" not in st.session_state:
-        st.session_state["exam_ai_tutor_extra"] = None
+    # session_state はstate_managerで初期化済み
 
     # ---- 科目・難易度設定 ----
     st.subheader("⚙️ 試験設定")

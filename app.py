@@ -13,6 +13,7 @@ from pathlib import Path
 
 from src.core.rag_core import RAGCore
 from src.core.ai_tutor import AITutor
+from src.state_manager import init_session_state
 from src.views.view_rag import render_rag_mode
 from src.views.view_curriculum import render_curriculum_mode
 from src.views.view_exam import render_exam_mode
@@ -129,9 +130,8 @@ def main() -> None:
         layout="wide",
     )
 
-    # 科目未選択→ロビー画面
-    if "selected_subject" not in st.session_state:
-        st.session_state["selected_subject"] = ""
+    # セッションステートの一括初期化
+    init_session_state()
 
     selected_subject: str = st.session_state["selected_subject"]
 
