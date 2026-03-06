@@ -74,6 +74,8 @@ def init_session_state() -> None:
         "exam_ref_chunks": [],
         # 修了試験の採点結果
         "exam_grading_result": None,
+        # 修了試験の難易度
+        "curriculum_exam_difficulty": "🟡 修士級（応用・分析）",
     }
 
     for key, default_value in _defaults.items():

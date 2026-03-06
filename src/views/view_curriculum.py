@@ -22,6 +22,13 @@ from src.progress import (
 )
 from src.config import PASS_SCORE_NORMAL
 
+# 修了試験の難易度とマッピング
+EXAM_DIFFICULTIES: dict[str, dict] = {
+    "🟢 学部級（基礎確認）": {"line": 70, "api": "Easy"},
+    "🟡 修士級（応用・分析）": {"line": 90, "api": "Normal"},
+    "🔴 博士級（批判的考察）": {"line": 95, "api": "Hard"},
+}
+
 # Mermaidコードブロック検出用の正規表現
 k_mermaidPattern = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL)
 
@@ -391,20 +398,31 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                     exam_lecture_text: str = lecture_data.get("lecture_text", "") if lecture_data else ""
                     if not exam_lecture_text:
                         st.warning("⚠️ 修了試験を受けるには、まず講義を生成してください。")
-                    elif st.button(
-                        f"📝 第{ch_num}章の修了試験を受ける",
-                        type="primary",
-                        use_container_width=True,
-                    ):
-                        with st.spinner("🎓 講義内容に基づいて修了試験を出題中..."):
-                            quiz_result: dict = ai_tutor.generate_quiz(
-                                ch_title,
-                                lecture_content=exam_lecture_text,
-                            )
-                        st.session_state["exam_question"] = quiz_result["question_text"]
-                        st.session_state["exam_ref_chunks"] = quiz_result["reference_chunks"]
-                        st.session_state["exam_grading_result"] = None
-                        st.rerun()
+                    else:
+                        selected_diff = st.selectbox(
+                            "📊 試験の難易度を選択",
+                            options=list(EXAM_DIFFICULTIES.keys()),
+                            index=list(EXAM_DIFFICULTIES.keys()).index(st.session_state.get("curriculum_exam_difficulty", "🟡 修士級（応用・分析）")),
+                            key="curriculum_exam_diff_select"
+                        )
+                        st.session_state["curriculum_exam_difficulty"] = selected_diff
+
+                        if st.button(
+                            f"📝 第{ch_num}章の修了試験を受ける",
+                            type="primary",
+                            use_container_width=True,
+                        ):
+                            api_diff = EXAM_DIFFICULTIES[selected_diff]["api"]
+                            with st.spinner("🎓 講義内容に基づいて修了試験を出題中..."):
+                                quiz_result: dict = ai_tutor.generate_quiz(
+                                    ch_title,
+                                    difficulty=api_diff,
+                                    lecture_content=exam_lecture_text,
+                                )
+                            st.session_state["exam_question"] = quiz_result["question_text"]
+                            st.session_state["exam_ref_chunks"] = quiz_result["reference_chunks"]
+                            st.session_state["exam_grading_result"] = None
+                            st.rerun()
                 else:
                     st.subheader("📝 修了試験（100点満点 / 合格ライン90点）")
                     st.markdown(exam_question)
@@ -424,22 +442,27 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                                 ref_context: str = "\n\n---\n\n".join(
                                     c["text"] for c in st.session_state["exam_ref_chunks"]
                                 )
+                                current_diff = st.session_state.get("curriculum_exam_difficulty", "🟡 修士級（応用・分析）")
+                                api_diff = EXAM_DIFFICULTIES[current_diff]["api"]
                                 with st.spinner("🧑‍🏫 鬼採点モードで採点中..."):
                                     grading: dict = ai_tutor.grade_answer(
                                         question=exam_question,
                                         user_answer=exam_answer.strip(),
                                         reference_context=ref_context,
+                                        difficulty=api_diff,
                                     )
                                 st.session_state["exam_grading_result"] = grading
                                 st.rerun()
                     else:
+                        current_diff = st.session_state.get("curriculum_exam_difficulty", "🟡 修士級（応用・分析）")
+                        pass_line = EXAM_DIFFICULTIES[current_diff]["line"]
                         score: int = exam_grading["score"]
-                        passed: bool = score >= PASS_SCORE_NORMAL
+                        passed: bool = score >= pass_line
 
                         if passed:
                             st.success(f"🏆 合格！ スコア: **{score} / 100 点**")
                         else:
-                            st.error(f"❌ 不合格。 スコア: **{score} / 100 点**（90点以上で合格）")
+                            st.error(f"❌ 不合格。 スコア: **{score} / 100 点**（{pass_line}点以上で合格）")
 
                         st.progress(score / 100)
                         st.markdown(exam_grading["feedback_text"])
