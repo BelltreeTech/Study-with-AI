@@ -149,6 +149,25 @@ def _render_dashboard(ai_tutor: AITutor) -> None:
         placeholder="Deep Learning",
         key="new_course_topic_input",
     )
+
+    chapter_volume_str = st.selectbox(
+        "📐 カリキュラムのボリューム（細かさ）を選択",
+        [
+            "🟢 おおざっぱに全体像を理解（約5章）",
+            "🟡 標準的なペースで詳しく理解（約10章）",
+            "🔴 スモールステップでめちゃ詳しく理解（約15章）",
+        ],
+        index=0,
+        key="new_course_volume_select",
+    )
+
+    volume_map = {
+        "🟢 おおざっぱに全体像を理解（約5章）": 5,
+        "🟡 標準的なペースで詳しく理解（約10章）": 10,
+        "🔴 スモールステップでめちゃ詳しく理解（約15章）": 15,
+    }
+    selected_chapter_length = volume_map[chapter_volume_str]
+
     if st.button("📋 カリキュラムを作成", type="primary", use_container_width=True):
         topic_stripped: str = new_topic.strip()
         if not topic_stripped:
@@ -156,8 +175,8 @@ def _render_dashboard(ai_tutor: AITutor) -> None:
         elif topic_stripped in all_courses:
             st.warning(f"「{topic_stripped}」はすでに登録されています。「再開する」で学習を続けてください。")
         else:
-            with st.spinner("🎓 カリキュラムを設計中..."):
-                result: list[dict] = ai_tutor.generate_curriculum(topic_stripped)
+            with st.spinner(f"🎓 全{selected_chapter_length}章のカリキュラムを設計中..."):
+                result: list[dict] = ai_tutor.generate_curriculum(topic_stripped, chapter_length=selected_chapter_length)
             if result:
                 save_course_progress(topic_stripped, result, 0)
                 _activate_course(topic_stripped)

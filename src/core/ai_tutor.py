@@ -482,19 +482,21 @@ class AITutor:
     # カリキュラム学習モード (Curriculum)
     # ================================================================
 
-    def generate_curriculum(self, topic: str) -> list[dict]:
+    def generate_curriculum(self, topic: str, chapter_length: int = 5) -> list[dict]:
         """
-        トピックに基づく体系的なカリキュラム（全5〜6章）を生成する。
+        トピックに基づく体系的なカリキュラムを指定された章数で生成する。
 
         Args:
             topic: 学習したいテーマ（例: "Deep Learning"）
+            chapter_length: カリキュラムの章数
 
         Returns:
             [{"chapter": int, "title": str, "description": str, "status": str}, ...]
         """
         curriculum_prompt: str = (
             "あなたは大学院の教務主任です。以下のトピックについて、"
-            "体系的な学習カリキュラム（全5〜6章）をJSON形式で生成してください。\n\n"
+            f"体系的な学習カリキュラム（全{chapter_length}章）をJSON形式で生成してください。\n"
+            f"指定された章数（{chapter_length}章）になるように、概念を適切に分割・細分化して構成してください。\n\n"
             "【出力形式（JSON配列のみ）】\n"
             "[\n"
             '  {"chapter": 1, "title": "章タイトル", "description": "1〜2文の概要", "status": "unlocked"},\n'
