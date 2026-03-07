@@ -10,6 +10,7 @@ from pathlib import Path
 from src.core.rag_core import RAGCore
 from src.core.ai_tutor import AITutor
 from src.config import PASS_SCORES
+from src.progress import update_weaknesses, get_weaknesses, remove_weakness
 
 
 def _build_exam_pipeline(subject: str) -> tuple[RAGCore, AITutor]:
@@ -129,17 +130,46 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
     st.divider()
 
     # ---- STEP 1: トピック入力 & 出題 ----
-    st.subheader("① トピックを入力")
-    topic: str = st.text_input(
-        "学習したいトピック（例: 勾配消失問題、正規化、活性化関数）",
-        placeholder="勾配消失問題",
-        key="quiz_topic_input",
-    )
-    if st.button("🎲 出題スタート", type="primary", use_container_width=True):
-        if not topic.strip():
+    st.subheader("① 出題設定")
+
+    # 弱点克服モードのトグル
+    weakness_mode = st.toggle("🔥 弱点克服特化モード")
+
+    current_weaknesses = get_weaknesses(selected_subject)
+    target_topic = ""
+    is_weakness_challenge = False
+
+    if weakness_mode:
+        if not current_weaknesses:
+            st.success("🎉 現在、この科目に記録されている弱点はありません！通常の学習を続けてください。")
+        else:
+            st.info("AIが分析したあなたの弱点一覧です。ここからランダムに出題されます。")
+            # 弱点タグの表示
+            tags = [f"{kw} (ミス: {data['error_count']}回)" for kw, data in current_weaknesses.items()]
+            st.markdown(" ".join([f"`{tag}`" for tag in tags]))
+
+            if st.button("🎲 弱点からランダム出題スタート", type="primary", use_container_width=True):
+                import random
+                # 苦手度（エラーカウント）を重みとしてランダム選択
+                choices = list(current_weaknesses.keys())
+                weights = [data["error_count"] for data in current_weaknesses.values()]
+                target_topic = random.choices(choices, weights=weights, k=1)[0]
+                is_weakness_challenge = True
+                st.session_state["exam_challenge_weakness_keyword"] = target_topic
+    else:
+        topic_input: str = st.text_input(
+            "学習したいトピック（例: 勾配消失問題、正規化、活性化関数）",
+            placeholder="勾配消失問題",
+            key="quiz_topic_input",
+        )
+        if st.button("🎲 出題スタート", type="primary", use_container_width=True):
+            target_topic = topic_input.strip()
+            st.session_state["exam_challenge_weakness_keyword"] = ""
+
+    if target_topic:
+        if not weakness_mode and not target_topic:
             st.warning("トピックを入力してください。")
         else:
-            # 科目が異なる場合はコンポーネントを初期化
             if selected_subject != current_subject:
                 with st.spinner(f"📚 {selected_subject} のインデックスを構築中..."):
                     _, active_tutor = _build_exam_pipeline(selected_subject)
@@ -148,7 +178,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
 
             with st.spinner(f"📚 {difficulty_descriptions[selected_difficulty]} の問題を生成中..."):
                 quiz_result: dict = active_tutor.generate_quiz(
-                    topic.strip(), difficulty=selected_difficulty
+                    target_topic, difficulty=selected_difficulty
                 )
             st.session_state["quiz_question"] = quiz_result["question_text"]
             st.session_state["quiz_ref_chunks"] = quiz_result["reference_chunks"]
@@ -193,6 +223,22 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
                         difficulty=selected_difficulty,
                     )
                 st.session_state["quiz_grading_result"] = grading
+
+                # 弱点の記録（精密モード：全採点結果から抽出された弱点を記録）
+                extracted_weaknesses = grading.get("weaknesses", [])
+                if extracted_weaknesses:
+                    update_weaknesses(selected_subject, extracted_weaknesses)
+
+                # 弱点克服モードでの出題だった場合、合格なら克服処理
+                challenge_kw = st.session_state.get("exam_challenge_weakness_keyword", "")
+                if challenge_kw:
+                    pass_line_for_clear = PASS_SCORES.get(selected_difficulty, 90)
+                    if grading["score"] >= pass_line_for_clear:
+                        remove_weakness(selected_subject, challenge_kw)
+                        st.session_state["exam_weakness_cleared"] = challenge_kw
+                    else:
+                        st.session_state["exam_weakness_cleared"] = ""
+
                 st.rerun()
 
     # ---- STEP 3: 採点結果表示 ----
@@ -224,6 +270,18 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
 
         # プログレスバー
         st.progress(score / 100)
+
+        # 弱点克服の通知
+        cleared_kw = st.session_state.get("exam_weakness_cleared", "")
+        if cleared_kw and passed:
+            st.balloons()
+            st.success(f"✨ 素晴らしい！弱点「{cleared_kw}」を見事克服しました！")
+            st.session_state["exam_weakness_cleared"] = ""
+
+        # 新たに発見された弱点
+        new_weaknesses = grading_result.get("weaknesses", [])
+        if new_weaknesses:
+            st.warning(f"⚠️ 今回の回答から、以下の概念について理解が甚いと判定されました: **{', '.join(new_weaknesses)}** （弱点リストに追加しました）")
 
         # フィードバック
         st.markdown(grading_result["feedback_text"])

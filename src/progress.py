@@ -154,3 +154,44 @@ def set_last_active_course(course_name: str) -> None:
     data: dict = _load_all_data()
     data["last_active_course"] = course_name
     _save_all_data(data)
+
+
+def update_weaknesses(course_name: str, new_weaknesses: list[str]) -> None:
+    """指定したコースの弱点キーワードを更新（追加・カウントアップ）する。"""
+    if not new_weaknesses:
+        return
+    data: dict = _load_all_data()
+    if course_name not in data["courses"]:
+        data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
+
+    course_data = data["courses"][course_name]
+    if "weaknesses" not in course_data:
+        course_data["weaknesses"] = {}
+
+    for w in new_weaknesses:
+        w_clean = w.strip()
+        if not w_clean or w_clean.lower() == "なし":
+            continue
+        if w_clean in course_data["weaknesses"]:
+            course_data["weaknesses"][w_clean]["error_count"] += 1
+        else:
+            course_data["weaknesses"][w_clean] = {"error_count": 1}
+
+    _save_all_data(data)
+
+
+def get_weaknesses(course_name: str) -> dict:
+    """指定したコースの弱点データを取得する。"""
+    data: dict = _load_all_data()
+    course_data = data["courses"].get(course_name, {})
+    return course_data.get("weaknesses", {})
+
+
+def remove_weakness(course_name: str, weakness_keyword: str) -> None:
+    """指定したコースから、克服済みの弱点キーワードを削除する。"""
+    data: dict = _load_all_data()
+    if course_name in data["courses"]:
+        weaknesses = data["courses"][course_name].get("weaknesses", {})
+        if weakness_keyword in weaknesses:
+            del weaknesses[weakness_keyword]
+            _save_all_data(data)

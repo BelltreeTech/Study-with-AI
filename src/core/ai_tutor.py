@@ -291,7 +291,10 @@ class AITutor:
                 "## 講評\n"
                 "良い点を褒め、改善点を優しく指摘。\n\n"
                 "## 模範解答のポイント\n"
-                "要点を箇条書きで。\n"
+                "要点を箇条書きで。\n\n"
+                "## 弱点キーワード\n"
+                "学生の回答から、誤解している・理解が甚い・説明が不足している「コア概念や専門用語」を最大３つ抽出し、カンマ区切りで出力してください。\n"
+                "（完璧な回答で弱点が一切ない場合は「なし」と出力すること）\n"
                 "- 日本語で出力すること。\n"
             )
         elif difficulty == "Hard":
@@ -319,7 +322,10 @@ class AITutor:
                 "## 総合講評\n"
                 "博士候補生として不足している点を容赦なく指摘。\n\n"
                 "## 模範解答のポイント\n"
-                "要点を箇条書きで。\n"
+                "要点を箇条書きで。\n\n"
+                "## 弱点キーワード\n"
+                "学生の回答から、誤解している・理解が甚い・説明が不足している「コア概念や専門用語」を最大３つ抽出し、カンマ区切りで出力してください。\n"
+                "（完璧な回答で弱点が一切ない場合は「なし」と出力すること）\n"
                 "- 日本語で出力すること。\n"
             )
         else:  # Normal（修士級）
@@ -345,7 +351,10 @@ class AITutor:
                 "## 総合講評\n"
                 "容赦なく指摘。\n\n"
                 "## 模範解答のポイント\n"
-                "要点を箇条書きで。\n"
+                "要点を箇条書きで。\n\n"
+                "## 弱点キーワード\n"
+                "学生の回答から、誤解している・理解が甚い・説明が不足している「コア概念や専門用語」を最大３つ抽出し、カンマ区切りで出力してください。\n"
+                "（完璧な回答で弱点が一切ない場合は「なし」と出力すること）\n"
                 "- 日本語で出力すること。\n"
             )
         grading_user_prompt: str = (
@@ -374,9 +383,17 @@ class AITutor:
         if score_match:
             score = min(int(score_match.group(1)), 100)
 
+        # 弱点キーワードをテキストから抽出
+        weaknesses: list[str] = []
+        weakness_match = re.search(r"## 弱点キーワード\n(.*)", feedback_text)
+        if weakness_match:
+            raw_keywords = weakness_match.group(1).split(",")
+            weaknesses = [kw.strip() for kw in raw_keywords if kw.strip() and kw.strip() != "なし"]
+
         return {
             "score": score,
             "feedback_text": feedback_text,
+            "weaknesses": weaknesses,
         }
 
     # ================================================================
