@@ -19,6 +19,7 @@ from src.progress import (
     delete_course,
     get_course_summary,
     set_last_active_course,
+    add_exp,
 )
 from src.config import PASS_SCORE_NORMAL
 
@@ -304,8 +305,9 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                 type="primary",
                 use_container_width=True,
             ):
-                with st.spinner("📝 大学院レベルの講義ノートを生成中...（3000文字以上の詳細版）"):
-                    result: dict = ai_tutor.generate_lecture(ch_title, ch_desc)
+                current_style = st.session_state.get("tutor_style", "🧑🏫 標準モード")
+                with st.spinner(f"📝 {current_style}で講義ノートを生成中..."):
+                    result: dict = ai_tutor.generate_lecture(ch_title, ch_desc, tutor_style=current_style)
                 st.session_state["current_lecture"] = result
                 curriculum[current_idx]["lecture_content"] = result
                 st.session_state["curriculum"] = curriculum
@@ -363,12 +365,14 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                     # ユーザーの入力を履歴に追加
                     chat_history.append({"role": "user", "content": user_input})
 
+                    current_style = st.session_state.get("tutor_style", "🧑🏫 標準モード")
                     # 教授の応答を生成
-                    with st.spinner("🧙 教授が思考中..."):
+                    with st.spinner(f"🧙 教授が{current_style}で思考中..."):
                         reply: str = ai_tutor.run_socratic_dialogue(
                             lecture_content=lecture_text,
                             chat_history=chat_history[:-1],  # 最新のuser入力は別途渡す
                             user_input=user_input,
+                            tutor_style=current_style,
                         )
 
                     # 教授の応答を履歴に追加
@@ -461,6 +465,15 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
 
                         if passed:
                             st.success(f"🏆 合格！ スコア: **{score} / 100 点**")
+                            # EXP付与（同一章の重複付与はしない）
+                            selected_course = st.session_state.get("active_course", "")
+                            chap_key = f"{selected_course}_ch{ch_num}"
+                            if "exam_cleared_flags" not in st.session_state:
+                                st.session_state["exam_cleared_flags"] = {}
+                            if not st.session_state["exam_cleared_flags"].get(chap_key):
+                                add_exp(selected_course, 50)
+                                st.session_state["exam_cleared_flags"][chap_key] = True
+                                st.toast("✨ カリキュラムクリアボーナス 50 EXP 獲得！", icon="✨")
                         else:
                             st.error(f"❌ 不合格。 スコア: **{score} / 100 点**（{pass_line}点以上で合格）")
 

@@ -9,6 +9,8 @@ import numpy as np
 import time
 import math
 from openai import OpenAI
+from janome.tokenizer import Tokenizer
+from rank_bm25 import BM25Okapi
 
 from src.embedder import (
     generate_cache_key,
@@ -55,6 +57,8 @@ class RAGCore:
         self._subject: str = target_subject
         self._skipped_files: list[str] = []
         self.docs: list[dict] = []
+        self._tokenizer: Tokenizer = Tokenizer()
+        self._bm25: BM25Okapi | None = None
 
         # 科目ごとのパスを設定
         data_dir: Path = Path("data") / target_subject
@@ -127,6 +131,132 @@ class RAGCore:
         save_cache(self._embeddings, self._chunks, cache_key, cache_dir)
         print(f"[{target_subject}] インデックス構築完了!")
 
+    def _build_bm25_index(self) -> None:
+        """チャンクのテキストを形態素解析しBM25インデックスを構築する。"""
+        if not self._chunks:
+            return
+        tokenized_corpus: list[list[str]] = [
+            [token.surface for token in self._tokenizer.tokenize(chunk["text"])]
+            for chunk in self._chunks
+        ]
+        self._bm25 = BM25Okapi(tokenized_corpus)
+
+    def _hybrid_search(
+        self,
+        query_embedding: np.ndarray,
+        query_text: str,
+        top_k: int = 5,
+    ) -> dict:
+        """
+        ベクトル検索とBM25検索をRRF（Reciprocal Rank Fusion）で統合する。
+
+        戻り値の型・構造は既存のvector_search.searchと完全に互換。
+
+        Args:
+            query_embedding: クエリの埋め込みベクトル
+            query_text: クエリのテキスト（BM25用）
+            top_k: 返却する上位件数
+
+        Returns:
+            {"results": [(chunk, rrf_score), ...], "debug_info": dict}
+        """
+        from src.vector_search import cosine_similarity
+
+        # BM25インデックスが未構築なら構築
+        if self._bm25 is None:
+            self._build_bm25_index()
+
+        n_chunks: int = len(self._chunks)
+        k_rrfConstant: int = 60
+
+        # --- ベクトル検索 ---
+        t_cosine_start: float = time.time()
+        vec_similarities: np.ndarray = cosine_similarity(query_embedding, self._embeddings)
+        t_cosine_end: float = time.time()
+        vec_ranked_indices: np.ndarray = np.argsort(vec_similarities)[::-1]
+        # インデックス -> 順位 (1始まり)
+        vec_rank_map: dict[int, int] = {int(idx): rank + 1 for rank, idx in enumerate(vec_ranked_indices)}
+
+        # --- BM25検索 ---
+        tokenized_query: list[str] = [token.surface for token in self._tokenizer.tokenize(query_text)]
+        if self._bm25 is not None and tokenized_query:
+            bm25_scores: np.ndarray = self._bm25.get_scores(tokenized_query)
+        else:
+            bm25_scores = np.zeros(n_chunks)
+        bm25_ranked_indices: np.ndarray = np.argsort(bm25_scores)[::-1]
+        bm25_rank_map: dict[int, int] = {int(idx): rank + 1 for rank, idx in enumerate(bm25_ranked_indices)}
+
+        # --- RRFスコア計算 ---
+        rrf_scores: list[tuple[int, float]] = []
+        for i in range(n_chunks):
+            v_rank: int = vec_rank_map.get(i, n_chunks)
+            b_rank: int = bm25_rank_map.get(i, n_chunks)
+            rrf_score: float = (1.0 / (k_rrfConstant + v_rank)) + (1.0 / (k_rrfConstant + b_rank))
+            rrf_scores.append((i, rrf_score))
+
+        # RRFスコアの降順でソートし、上位top_k件を取得
+        rrf_scores.sort(key=lambda x: x[1], reverse=True)
+        top_indices: list[int] = [idx for idx, _ in rrf_scores[:top_k]]
+
+        results: list[tuple[dict, float]] = [
+            (self._chunks[idx], rrf_scores_val)
+            for idx, rrf_scores_val in rrf_scores[:top_k]
+        ]
+
+        # debug_infoは既存のsearchの出力と互換にする
+        top1_idx: int = top_indices[0] if top_indices else 0
+        query_l2: float = float(np.linalg.norm(query_embedding))
+        top1_doc_l2: float = float(np.linalg.norm(self._embeddings[top1_idx]))
+        raw_dot: float = float(np.dot(query_embedding, self._embeddings[top1_idx]))
+
+        debug_info: dict = {
+            "query_shape": query_embedding.shape,
+            "docs_shape": self._embeddings.shape,
+            "similarities_shape": vec_similarities.shape,
+            "max_similarity": float(np.max(vec_similarities)),
+            "all_similarities": vec_similarities.tolist(),
+            "latency_cosine_ms": (t_cosine_end - t_cosine_start) * 1000,
+            "latency_sort_ms": 0.0,
+            "query_l2_norm": round(query_l2, 6),
+            "top1_doc_l2_norm": round(top1_doc_l2, 6),
+            "raw_dot_product": round(raw_dot, 6),
+            "search_mode": "hybrid_rrf",
+        }
+
+        # PCA 2D投影
+        try:
+            from sklearn.decomposition import PCA
+            np_top_indices = np.array(top_indices)
+            n_total: int = self._embeddings.shape[0]
+            k_sampleSize: int = min(500, n_total)
+            rng = np.random.default_rng(seed=42)
+            sample_indices: np.ndarray = rng.choice(n_total, size=k_sampleSize, replace=False)
+            all_indices: np.ndarray = np.unique(np.concatenate([sample_indices, np_top_indices]))
+            sampled_docs: np.ndarray = self._embeddings[all_indices]
+            combined: np.ndarray = np.vstack([query_embedding.reshape(1, -1), sampled_docs])
+            pca = PCA(n_components=2)
+            coords_2d: np.ndarray = pca.fit_transform(combined)
+            top_k_positions: set = set()
+            for tk_idx in np_top_indices:
+                pos = np.where(all_indices == tk_idx)[0]
+                if len(pos) > 0:
+                    top_k_positions.add(int(pos[0]) + 1)
+            debug_info["pca_plot_data"] = {
+                "query": {"x": float(coords_2d[0, 0]), "y": float(coords_2d[0, 1])},
+                "chunks_x": coords_2d[1:, 0].tolist(),
+                "chunks_y": coords_2d[1:, 1].tolist(),
+                "top_k_positions": list(top_k_positions),
+                "explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
+            }
+        except Exception as e:
+            debug_info["pca_plot_data"] = None
+            print(f"PCA投影に失敗: {e}")
+
+        return {
+            "results": results,
+            "debug_info": debug_info,
+        }
+
     # ================================================================
     # 検索メソッド
     # ================================================================
@@ -194,8 +324,8 @@ class RAGCore:
         """
         expanded_query: str = self.expand_query(query)
         query_embedding: np.ndarray = generate_embeddings([expanded_query])[0]
-        search_result: dict = search(
-            query_embedding, self._embeddings, self._chunks, top_k=top_k
+        search_result: dict = self._hybrid_search(
+            query_embedding, expanded_query, top_k=top_k
         )
         search_result["expanded_query"] = expanded_query
         return search_result
@@ -244,9 +374,9 @@ class RAGCore:
             for idx in top5_indices
         ]
 
-        # ベクトル検索（NumPyベースのCosine Similarity）
-        search_result: dict = search(
-            query_embedding, self._embeddings, self._chunks, top_k=top_k
+        # ハイブリッド検索（ベクトル + BM25 + RRF）
+        search_result: dict = self._hybrid_search(
+            query_embedding, expanded_query, top_k=top_k
         )
         results: list[tuple[dict, float]] = search_result["results"]
         debug_info: dict = search_result["debug_info"]

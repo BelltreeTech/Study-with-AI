@@ -13,4 +13,7 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "streamlit>=1.54.0",
     "streamlit-mermaid>=0.3.0",
+    "plotly",
+    "janome",
+    "rank-bm25",
 ]

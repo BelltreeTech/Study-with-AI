@@ -195,3 +195,85 @@ def remove_weakness(course_name: str, weakness_keyword: str) -> None:
         if weakness_keyword in weaknesses:
             del weaknesses[weakness_keyword]
             _save_all_data(data)
+
+
+import datetime
+
+
+def add_exp(course_name: str, exp_amount: int) -> None:
+    """EXPを加算し、日次リセット判定を行う。"""
+    data = _load_all_data()
+    today = datetime.date.today().isoformat()
+
+    if "user_profile" not in data:
+        data["user_profile"] = {
+            "total_exp": 0,
+            "daily_exp": 0,
+            "last_active_date": today,
+            "current_streak": 0,
+            "last_streak_date": "",
+        }
+
+    profile = data["user_profile"]
+
+    # 日付が変わっていたらデイリーEXPをリセット
+    if profile.get("last_active_date") != today:
+        profile["daily_exp"] = 0
+        profile["last_active_date"] = today
+
+    profile["total_exp"] = profile.get("total_exp", 0) + exp_amount
+    profile["daily_exp"] = profile.get("daily_exp", 0) + exp_amount
+
+    # コースごとのEXP
+    if course_name not in data["courses"]:
+        data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
+    data["courses"][course_name]["exp"] = data["courses"][course_name].get("exp", 0) + exp_amount
+
+    _save_all_data(data)
+
+
+def check_and_update_streak(target_daily_exp: int) -> bool:
+    """目標EXPに達していればストリークを更新。更新した場合はTrueを返す。"""
+    data = _load_all_data()
+    profile = data.get("user_profile", {})
+    if not profile:
+        return False
+
+    today = datetime.date.today().isoformat()
+    last_streak = profile.get("last_streak_date", "")
+
+    if last_streak == today:
+        return False  # 今日はすでに達成済み
+
+    if profile.get("daily_exp", 0) >= target_daily_exp:
+        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        if last_streak == yesterday:
+            profile["current_streak"] = profile.get("current_streak", 0) + 1
+        else:
+            profile["current_streak"] = 1
+        profile["last_streak_date"] = today
+        _save_all_data(data)
+        return True
+    return False
+
+
+def get_dashboard_data() -> dict:
+    """ダッシュボード表示用のデータを一括取得する。"""
+    data = _load_all_data()
+    return {
+        "profile": data.get("user_profile", {"total_exp": 0, "daily_exp": 0, "current_streak": 0}),
+        "courses": data.get("courses", {}),
+    }
+
+
+def add_pomodoro_session(minutes: int) -> None:
+    """ポモドーロのセッション回数と累計集中時間を更新する。"""
+    data = _load_all_data()
+    if "user_profile" not in data:
+        data["user_profile"] = {}
+
+    profile = data["user_profile"]
+    profile["total_pomodoros"] = profile.get("total_pomodoros", 0) + 1
+    profile["focused_minutes"] = profile.get("focused_minutes", 0) + minutes
+
+    _save_all_data(data)

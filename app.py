@@ -213,22 +213,74 @@ def main() -> None:
         )
 
         st.divider()
+        st.header("🗣️ チューターの解説スタイル")
+        tutor_style: str = st.selectbox(
+            "解説・対話の方針",
+            [
+                "🧑🏫 標準モード (理論と具体例のバランス)",
+                "🎨 直感・具体例重視 (数式を減らし比喩を多用)",
+                "🔬 厳密・数式重視 (定義と証明を妥協なく解説)",
+                "👹 ソクラテス・スパルタ (答えを教えず問いで返す)",
+            ],
+            index=0,
+            key="tutor_style_select",
+        )
+        st.session_state["tutor_style"] = tutor_style
+
+        st.divider()
         # モード選択
         st.header("🧭 モード")
         app_mode: str = st.radio(
             "モード選択",
-            ["🔍 知識検索 (RAG)", "🎓 模擬試験 (Feynman Drill)", "🏫 カリキュラム学習 (Curriculum)"],
+            ["📊 マイページ (Dashboard)", "🔍 知識検索 (RAG)", "🎓 模擬試験 (Feynman Drill)", "🏫 カリキュラム学習 (Curriculum)"],
             index=0,
             label_visibility="collapsed",
         )
 
-    # ---- コンポーネント初期化（科目名で構築） ----
+    # --- ポモドーロ・タイマー (サイドバー常設) ---
+    st.sidebar.divider()
+    st.sidebar.markdown("### 🍅 集中トラッカー")
+
+    import datetime
+    if "pomodoro_start_time" not in st.session_state:
+        st.session_state["pomodoro_start_time"] = None
+
+    if st.session_state["pomodoro_start_time"] is None:
+        if st.sidebar.button("▶️ 25分集中スタート", use_container_width=True):
+            st.session_state["pomodoro_start_time"] = datetime.datetime.now()
+            st.rerun()
+    else:
+        start_time = st.session_state["pomodoro_start_time"]
+        elapsed_mins = (datetime.datetime.now() - start_time).total_seconds() / 60.0
+
+        st.sidebar.info(f"🔥 集中モード実行中\n開始: {start_time.strftime('%H:%M')}")
+
+        if st.sidebar.button("⏹️ セッション完了", type="primary", use_container_width=True):
+            if elapsed_mins >= 25.0:
+                from src.progress import add_exp, add_pomodoro_session
+                add_pomodoro_session(25)
+                # 科目名を「集中学習」としてEXPを追加
+                add_exp("集中学習", 20)
+                st.session_state["pomodoro_start_time"] = None
+                st.sidebar.success("🎉 25分達成！ 20 EXP獲得！")
+                st.balloons()
+            else:
+                st.sidebar.warning(f"⚠️ まだ {int(elapsed_mins)} 分です。25分以上の経過が必要です。")
+
+        if st.sidebar.button("✖️ 中断する (記録なし)", use_container_width=True):
+            st.session_state["pomodoro_start_time"] = None
+            st.rerun()
+    st.sidebar.divider()
+
     rag_core, ai_tutor = _build_components(selected_subject)
 
     # ================================================================
     # モード分岐（各Viewモジュールにルーティング）
     # ================================================================
-    if app_mode == "🔍 知識検索 (RAG)":
+    if app_mode == "📊 マイページ (Dashboard)":
+        from src.views.view_dashboard import render_dashboard
+        render_dashboard()
+    elif app_mode == "🔍 知識検索 (RAG)":
         render_rag_mode(rag_core, debug_mode, top_k, style, length)
     elif app_mode == "🎓 模擬試験 (Feynman Drill)":
         render_exam_mode(ai_tutor)

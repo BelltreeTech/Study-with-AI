@@ -10,7 +10,7 @@ from pathlib import Path
 from src.core.rag_core import RAGCore
 from src.core.ai_tutor import AITutor
 from src.config import PASS_SCORES
-from src.progress import update_weaknesses, get_weaknesses, remove_weakness
+from src.progress import update_weaknesses, get_weaknesses, remove_weakness, add_exp
 
 
 def _build_exam_pipeline(subject: str) -> tuple[RAGCore, AITutor]:
@@ -236,6 +236,9 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
                     if grading["score"] >= pass_line_for_clear:
                         remove_weakness(selected_subject, challenge_kw)
                         st.session_state["exam_weakness_cleared"] = challenge_kw
+                        # EXP付与
+                        add_exp(selected_subject, 30)
+                        st.toast("✨ 弱点克服ボーナス 30 EXP 獲得！", icon="✨")
                     else:
                         st.session_state["exam_weakness_cleared"] = ""
 
