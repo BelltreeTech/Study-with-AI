@@ -227,6 +227,10 @@ def main() -> None:
         )
         st.session_state["tutor_style"] = tutor_style
 
+        # 🧮 計算・数式導出モードのグローバルトグル
+        require_math = st.toggle("🧮 計算・数式導出モード（途中式を重視）", value=False, key="require_math_toggle")
+        st.session_state["require_math"] = require_math
+
         st.divider()
         # モード選択
         st.header("🧭 モード")

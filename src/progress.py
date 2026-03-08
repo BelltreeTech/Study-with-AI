@@ -157,7 +157,7 @@ def set_last_active_course(course_name: str) -> None:
 
 
 def update_weaknesses(course_name: str, new_weaknesses: list[str]) -> None:
-    """指定したコースの弱点キーワードを更新（追加・カウントアップ）する。"""
+    """弱点キーワードを更新（新規登録、またはLv.1へのリセット）する。"""
     if not new_weaknesses:
         return
     data: dict = _load_all_data()
@@ -168,15 +168,25 @@ def update_weaknesses(course_name: str, new_weaknesses: list[str]) -> None:
     if "weaknesses" not in course_data:
         course_data["weaknesses"] = {}
 
+    today = datetime.date.today()
+    tomorrow = (today + datetime.timedelta(days=1)).isoformat()
+
     for w in new_weaknesses:
         w_clean = w.strip()
         if not w_clean or w_clean.lower() == "なし":
             continue
         if w_clean in course_data["weaknesses"]:
-            course_data["weaknesses"][w_clean]["error_count"] += 1
+            # 既に存在し、再び間違えた場合はペナルティとしてLv.1にリセットし、エラーカウントを加算
+            course_data["weaknesses"][w_clean]["error_count"] = course_data["weaknesses"][w_clean].get("error_count", 1) + 1
+            course_data["weaknesses"][w_clean]["srs_level"] = 1
+            course_data["weaknesses"][w_clean]["next_review"] = tomorrow
         else:
-            course_data["weaknesses"][w_clean] = {"error_count": 1}
-
+            # 新規登録
+            course_data["weaknesses"][w_clean] = {
+                "error_count": 1,
+                "srs_level": 1,
+                "next_review": tomorrow,
+            }
     _save_all_data(data)
 
 
@@ -187,13 +197,28 @@ def get_weaknesses(course_name: str) -> dict:
     return course_data.get("weaknesses", {})
 
 
-def remove_weakness(course_name: str, weakness_keyword: str) -> None:
-    """指定したコースから、克服済みの弱点キーワードを削除する。"""
+def process_weakness_clear(course_name: str, weakness_keyword: str) -> str:
+    """弱点をクリアした際のレベルアップ処理を行う。戻り値は 'mastered' か 'leveled_up'。"""
     data: dict = _load_all_data()
+    status = "not_found"
     if course_name in data["courses"]:
         weaknesses = data["courses"][course_name].get("weaknesses", {})
         if weakness_keyword in weaknesses:
-            del weaknesses[weakness_keyword]
+            w_data = weaknesses[weakness_keyword]
+            current_level = w_data.get("srs_level", 1)
+
+            if current_level >= 3:
+                # Lv.3をクリアしたら完全マスター（削除）
+                del weaknesses[weakness_keyword]
+                status = "mastered"
+            else:
+                # レベルアップと次の復習日の設定 (Lv.1 -> 3日後, Lv.2 -> 7日後)
+                new_level = current_level + 1
+                days_to_add = 3 if new_level == 2 else 7
+                w_data["srs_level"] = new_level
+                w_data["next_review"] = (datetime.date.today() + datetime.timedelta(days=days_to_add)).isoformat()
+                status = "leveled_up"
+
             _save_all_data(data)
 
 

@@ -325,8 +325,11 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                 use_container_width=True,
             ):
                 current_style = st.session_state.get("tutor_style", "🧑🏫 標準モード")
+                require_math = st.session_state.get("require_math", False)
                 with st.spinner(f"📝 {current_style}で講義ノートを生成中..."):
-                    result: dict = ai_tutor.generate_lecture(ch_title, ch_desc, tutor_style=current_style)
+                    result: dict = ai_tutor.generate_lecture(
+                        ch_title, ch_desc, tutor_style=current_style, require_math=require_math
+                    )
                 st.session_state["current_lecture"] = result
                 curriculum[current_idx]["lecture_content"] = result
                 st.session_state["curriculum"] = curriculum

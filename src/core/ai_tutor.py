@@ -84,6 +84,7 @@ class AITutor:
         topic_text: str,
         difficulty: str = "Normal",
         lecture_content: str = "",
+        require_math: bool = False,
     ) -> dict:
         """
         トピックに関する試験問題を生成する。
@@ -216,7 +217,15 @@ class AITutor:
                 "3. 学生が講義を精読すれば、論理的に満点が取れる問題設計にしてください。\n"
             )
 
-        final_system_prompt: str = quiz_system_prompt + lecture_constraint
+        # 計算・数式導出モードの注入
+        math_instruction: str = ""
+        if require_math:
+            math_instruction = (
+                "\n【重要】指定されたトピックに関して、必ず**具体的な数式を用いた計算問題、または定理の導出問題**を含めてください。"
+                "解答には最終的な数値だけでなく、LaTeXを用いたステップバイステップの数式展開（途中式）を要求する形式にしてください。\n"
+            )
+
+        final_system_prompt: str = quiz_system_prompt + lecture_constraint + math_instruction
 
         # ユーザープロンプトを構築
         if lecture_content:
@@ -260,6 +269,7 @@ class AITutor:
         user_answer: str,
         reference_context: str,
         difficulty: str = "Normal",
+        require_math: bool = False,
     ) -> dict:
         """
         ユーザーの回答をLLMが採点する。
@@ -357,6 +367,15 @@ class AITutor:
                 "（完璧な回答で弱点が一切ない場合は「なし」と出力すること）\n"
                 "- 日本語で出力すること。\n"
             )
+
+        # 計算・数式導出モードの注入
+        if require_math:
+            grading_system_prompt += (
+                "【重要】学生の数式展開（途中式）をステップごとに確認し、"
+                "論理の飛躍や符号のミス、計算間違いがないか厳密にチェックしてください。"
+                "最終的な答えが合っていても、導出プロセスが間違っていれば減点してください。\n"
+            )
+
         grading_user_prompt: str = (
             f"## 出題された問題\n\n{question}\n\n"
             f"## 正解の根拠（コンテキスト）\n\n{reference_context}\n\n"
@@ -550,6 +569,7 @@ class AITutor:
         chapter_title: str,
         chapter_description: str,
         tutor_style: str = "🧑🏫 標準モード",
+        require_math: bool = False,
     ) -> dict:
         """
         指定された章の講義ノートを、RAG検索結果を元に生成する。
@@ -633,6 +653,11 @@ class AITutor:
             lecture_system_prompt += (
                 "- 【解説スタイル】: 曖昧な比喩は避け、数学的定義、定理の証明、"
                 "アルゴリズムの厳密な定式化を最優先して解説してください。\n"
+            )
+        if require_math:
+            lecture_system_prompt += (
+                "- 【計算・数式導出モード】: 具体的な数式を用いたステップバイステップの導出プロセス（途中式）を"
+                "MarkdownとLaTeXで詳細に記述してください。\n"
             )
         lecture_user_prompt: str = (
             f"## コンテキスト（教科書からの抜粋）\n\n{context}\n\n"

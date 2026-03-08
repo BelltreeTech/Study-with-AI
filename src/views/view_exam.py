@@ -10,7 +10,7 @@ from pathlib import Path
 from src.core.rag_core import RAGCore
 from src.core.ai_tutor import AITutor
 from src.config import PASS_SCORES
-from src.progress import update_weaknesses, get_weaknesses, remove_weakness, add_exp
+from src.progress import update_weaknesses, get_weaknesses, process_weakness_clear, add_exp
 
 
 def _build_exam_pipeline(subject: str) -> tuple[RAGCore, AITutor]:
@@ -178,7 +178,9 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
 
             with st.spinner(f"📚 {difficulty_descriptions[selected_difficulty]} の問題を生成中..."):
                 quiz_result: dict = active_tutor.generate_quiz(
-                    target_topic, difficulty=selected_difficulty
+                    target_topic,
+                    difficulty=selected_difficulty,
+                    require_math=st.session_state.get("require_math", False),
                 )
             st.session_state["quiz_question"] = quiz_result["question_text"]
             st.session_state["quiz_ref_chunks"] = quiz_result["reference_chunks"]
@@ -221,6 +223,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
                         user_answer=user_answer.strip(),
                         reference_context=ref_context,
                         difficulty=selected_difficulty,
+                        require_math=st.session_state.get("require_math", False),
                     )
                 st.session_state["quiz_grading_result"] = grading
 
@@ -234,11 +237,16 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
                 if challenge_kw:
                     pass_line_for_clear = PASS_SCORES.get(selected_difficulty, 90)
                     if grading["score"] >= pass_line_for_clear:
-                        remove_weakness(selected_subject, challenge_kw)
+                        clear_status = process_weakness_clear(selected_subject, challenge_kw)
                         st.session_state["exam_weakness_cleared"] = challenge_kw
-                        # EXP付与
-                        add_exp(selected_subject, 30)
-                        st.toast("✨ 弱点克服ボーナス 30 EXP 獲得！", icon="✨")
+                        st.session_state["exam_weakness_clear_status"] = clear_status
+
+                        if clear_status == "mastered":
+                            add_exp(selected_subject, 100)
+                            st.toast("🌸 完全マスターボーナス 100 EXP 獲得！", icon="🌸")
+                        else:
+                            add_exp(selected_subject, 30)
+                            st.toast("✨ 弱点レベルアップボーナス 30 EXP 獲得！", icon="✨")
                     else:
                         st.session_state["exam_weakness_cleared"] = ""
 
@@ -276,10 +284,15 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
 
         # 弱点克服の通知
         cleared_kw = st.session_state.get("exam_weakness_cleared", "")
+        clear_status = st.session_state.get("exam_weakness_clear_status", "")
         if cleared_kw and passed:
             st.balloons()
-            st.success(f"✨ 素晴らしい！弱点「{cleared_kw}」を見事克服しました！")
+            if clear_status == "mastered":
+                st.success(f"🌸 素晴らしい！弱点「{cleared_kw}」を【完全マスター】しました！（リストから浄化されました）")
+            else:
+                st.success(f"✨ ナイス！弱点「{cleared_kw}」の理解度が【レベルアップ】しました！数日後に再び復習しましょう。")
             st.session_state["exam_weakness_cleared"] = ""
+            st.session_state["exam_weakness_clear_status"] = ""
 
         # 新たに発見された弱点
         new_weaknesses = grading_result.get("weaknesses", [])

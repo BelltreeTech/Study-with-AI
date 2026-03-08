@@ -7,7 +7,7 @@ EXP・称号システム、ストリーク、Plotlyレーダーチャートを�
 import streamlit as st
 import plotly.express as px
 import pandas as pd
-from src.progress import get_dashboard_data, check_and_update_streak
+from src.progress import get_dashboard_data, check_and_update_streak, get_due_reviews
 
 
 def get_title(level: int) -> str:
@@ -48,6 +48,20 @@ def render_dashboard() -> None:
     st.markdown(f"### 🛡️ 現在のランク: **Lv.{level} {title}**")
     st.progress((total_exp % 100) / 100.0)
     st.caption(f"次のレベルまであと **{next_exp} EXP** (累計: {total_exp} EXP)")
+
+    st.divider()
+
+    # --- クエストセクション: 本日の復習 ---
+    st.markdown("### ⚔️ 本日の復習クエスト")
+    due_reviews = get_due_reviews()
+
+    if not due_reviews:
+        st.success("🎉 現在、復習期日を迎えている弱点はありません。新しい学習を進めましょう！")
+    else:
+        st.warning(f"⚠️ 今日は **{len(due_reviews)} 個** の復習クエストが発生しています！忘却曲線に打ち勝ちましょう。")
+        for review in due_reviews:
+            st.markdown(f"- 📘 **{review['course']}**: `{review['keyword']}` (現在 Lv.{review['level']})")
+        st.info("💡 サイドバーから「模擬試験 (Feynman Drill)」に移動し、「🔥弱点克服特化モード」でクエストに挑戦してください。")
 
     st.divider()
 
