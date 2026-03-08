@@ -4,6 +4,19 @@ AI教育チューターモジュール。
 LLMを用いた教育コンテンツ生成ロジックを担当する。
 試験問題生成、採点、ソクラテス式対話、カリキュラム生成、講義ノート生成を行う。
 ドキュメント検索ロジックはRAGCoreに委譲する。
+
+🧠 【プロンプトエンジニアリングの核心】
+このモジュールはLLMの「プロンプトエンジニアリング」技術の実践例である。
+LLMはInstruction Tuning（SFT: Supervised Fine-Tuning）を通じて、
+「System Prompt（ペルソナと制約）」と「User Prompt（タスク）」の構造を学習している。
+この構造を活用して、LLMの振る舞いを動的に制御するのがプロンプトエンジニアリングの本質。
+
+💡 【主要機能とDL概念の対応】
+- generate_quiz: 確認テスト生成 → Constrained Generation（出力形式の制約）
+- grade_answer: 自動採点 → Structured Output Parsing（構造化出力の解析）
+- run_socratic_dialogue: 対話 → Multi-turn Conversation（複数ターンの対話管理）
+- generate_curriculum: カリキュラム生成 → JSON Mode（構造化データ生成）
+- generate_lecture: 講義生成 → In-Context Learning + RAG
 """
 
 import re
@@ -38,6 +51,11 @@ class AITutor:
 
     LLMを利用した教育コンテンツの生成を担当する。
     検索機能が必要な場合はRAGCoreから取得したチャンク・Embeddingを使用する。
+
+    🧠 【設計思想】
+    このクラスは「RAGの検索層」と「LLMの生成層」を分離する設計。
+    RAGCoreが「教科書の検索」を担当し、AITutorが「教育コンテンツの生成」を担当する。
+    DLのアーキテクチャで言えば、Encoder（RAGCore）とDecoder（AITutor）の分離に相当する。
     """
 
     def __init__(self, client: OpenAI) -> None:
@@ -92,20 +110,29 @@ class AITutor:
         lecture_contentが指定された場合は、講義内容のみに基づいて出題する。
         指定されない場合は、RAG検索結果に基づいて出題する。
 
+        🧠 【プロンプトエンジニアリングの技法】
+        - Constrained Generation: 出力形式を厳密に指定（パートA/Bの構成、配点、形式）
+        - Few-shot Prompting: 出力例を示すことでLLMの出力を誘導
+        - Role Prompting: 「大学の教授」「博士課程の教授」等の役割を付与
+        - 難易度別にプロンプトを動的に切り替える「プロンプトテンプレート」方式
+
         Args:
             topic_text: 学習したいトピック（例: 勾配消失問題）
             difficulty: 難易度（"Easy" / "Normal" / "Hard"）
             lecture_content: 講義ノート本文（カリキュラム修了試験用）
+            require_math: 計算・数式導出モードの有効/無効
 
         Returns:
             {"question_text": str, "reference_chunks": list[dict]}
         """
-        # 講義ベースの出題か RAG検索ベースの出題かを判定
+        # 💡 講義ベースの出題か RAG検索ベースの出題かを判定
+        #    講義ベース: 講義ノートが「試験範囲」、RAG結果は「裏付けデータ」として使用
+        #    RAGベース: 検索結果がそのまま出題の根拠
         reference_chunks: list[dict] = []
         context: str = ""
 
         if lecture_content:
-            # 講義ベース: RAG検索は裏付けデータとしてのみ使用
+            # 💡 講義ベース: RAG検索は裏付けデータとしてのみ使用
             expanded_topic: str = self._do_expand_query(topic_text)
             topic_embedding: np.ndarray = generate_embeddings([expanded_topic])[0]
             search_result: dict = search(
@@ -147,7 +174,9 @@ class AITutor:
                 })
             context = "\n\n---\n\n".join(context_parts)
 
-        # 難易度別プロンプト
+        # 💡 難易度別プロンプト: Role Prompting + Constrained Generation
+        #    Easy/Normal/HardでLLMの「人格」と「出力制約」を動的に切り替える
+        #    これはLLMのInstruction Following能力を活用した動的プロンプトテンプレート方式
         if difficulty == "Easy":
             quiz_system_prompt: str = (
                 "あなたは大学の教授です。学部1〜2年生向けの基礎確認テストを作成してください。\n"
@@ -274,14 +303,21 @@ class AITutor:
         """
         ユーザーの回答をLLMが採点する。
 
+        🧠 【Structured Output Parsingの実践】
+        LLMの自由形式テキストから、正規表現で「スコア」と「弱点キーワード」を抽出する。
+        これはLLMの出力をプログラムで処理可能な構造化データに変換する技術。
+        OpenAIのJSON ModeやFunction Callingの代替として、
+        プロンプトで出力形式を指定し、正規表現で解析するアプローチ。
+
         Args:
             question: 出題された問題文
             user_answer: ユーザーの回答テキスト
             reference_context: 正解の根拠となるコンテキスト
             difficulty: 難易度（"Easy" / "Normal" / "Hard"）
+            require_math: 計算・数式導出モードの有効/無効
 
         Returns:
-            {"score": int, "feedback_text": str}
+            {"score": int, "feedback_text": str, "weaknesses": list[str]}
         """
         # 難易度別採点プロンプト
         if difficulty == "Easy":
@@ -396,13 +432,18 @@ class AITutor:
         except Exception as e:
             feedback_text = f"採点に失敗しました: {e}"
 
-        # スコアをテキストから抽出
+        # 🧠 【Structured Output Parsing】
+        # LLMの自由テキスト出力から、正規表現で構造化データを抽出
+
+        # 🧐 スコア抽出: 「XX点」のパターンを正規表現で検索
         score: int = 0
         score_match = re.search(r"(\d{1,3})\s*点", feedback_text)
         if score_match:
             score = min(int(score_match.group(1)), 100)
 
-        # 弱点キーワードをテキストから抽出
+        # 🧐 弱点キーワード抽出: 「## 弱点キーワード」セクションからカンマ区切りで抽出
+        # 💡 この弱点キーワードはSpaced Repetition（間隔反復）システムに連携し、
+        #    忘却曲線に基づく復習スケジュールの生成に使用される
         weaknesses: list[str] = []
         weakness_match = re.search(r"## 弱点キーワード\n(.*)", feedback_text)
         if weakness_match:
@@ -428,6 +469,16 @@ class AITutor:
     ) -> str:
         """
         講義内容に基づく対話を行う。
+
+        🧠 【ソクラテス式問答法の実装】
+        ソクラテス式問答法は、直接答えを教えず、問いかけによって学生自身の気づきを促す教育手法。
+        これはLLMのMulti-turn Conversation（複数ターン対話）能力を活用し、
+        過去の対話履歴をコンテキストとして保持することで実現する。
+
+        💡 【DL概念との紐付け】
+        - chat_historyはTransformerのKV Cache（Key-Valueキャッシュ）に相当
+        - SOCRATIC_HISTORY_LIMITはContext Windowの制限に対応するトランケーション
+        - tutor_styleによるプロンプト切り替えはConditional Generationの一形態
 
         Args:
             lecture_content: 現在の講義ノート本文
@@ -505,6 +556,12 @@ class AITutor:
         """
         トピックに基づく体系的なカリキュラムを指定された章数で生成する。
 
+        🧠 【JSON Mode（構造化データ生成）】
+        LLMに「JSON配列以外のテキストは一切出力しないこと」と指示することで、
+        プログラムで直接パース可能な構造化データを生成させる。
+        ただし、LLMが余計なテキストを付ける場合に備えて、
+        raw_text.find("[") でJSON部分を抽出する防御ロジックを実装している。
+
         Args:
             topic: 学習したいテーマ（例: "Deep Learning"）
             chapter_length: カリキュラムの章数
@@ -574,14 +631,25 @@ class AITutor:
         """
         指定された章の講義ノートを、RAG検索結果を元に生成する。
 
+        🧠 【In-Context Learning + RAGの統合】
+        RAG検索で得た教科書のチャンクをLLMのプロンプトに注入し、
+        その情報を基に大学院レベルの講義ノートを生成する。
+        これはRAGの「検索強化生成」の典型的なユースケース。
+
+        💡 tutor_styleとrequire_mathによるプロンプトの動的切り替えは、
+           Conditional Generation（条件付き生成）の一形態。
+
         Args:
             chapter_title: 章のタイトル
             chapter_description: 章の概要
+            tutor_style: 解説スタイル
+            require_math: 計算・数式導出モード
 
         Returns:
             {"lecture_text": str, "source_chunks": list[dict]}
         """
-        # 章タイトルでベクトル検索（Top-K: 十分な情報量を確保）
+        # 💡 章タイトルでベクトル検索（Top-K: 十分な情報量を確保）
+        # 📐 query_embedding Shape: (embedding_dim,)
         search_query: str = f"{chapter_title} {chapter_description}"
         expanded_query: str = self._do_expand_query(search_query)
         query_embedding: np.ndarray = generate_embeddings([expanded_query])[0]

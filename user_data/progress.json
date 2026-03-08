@@ -1,100 +1,5 @@
 {
   "courses": {
-    "深層学習（入門）": {
-      "curriculum": [
-        {
-          "chapter": 1,
-          "title": "深層学習の基礎概念",
-          "description": "深層学習の基本的な概念とその背景を理解する。人工知能と機械学習の関係について説明する。",
-          "status": "unlocked"
-        },
-        {
-          "chapter": 2,
-          "title": "人工ニューラルネットワークの構造",
-          "description": "人工ニューラルネットワークの基本構造について学ぶ。ノード、層、重みの役割を理解する。",
-          "status": "locked"
-        },
-        {
-          "chapter": 3,
-          "title": "活性化関数の種類",
-          "description": "ニューラルネットワークで使用される様々な活性化関数とその特性を学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 4,
-          "title": "損失関数と最適化手法",
-          "description": "モデルの性能を評価するための損失関数と、学習を最適化する手法について学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 5,
-          "title": "バックプロパゲーションの仕組み",
-          "description": "バックプロパゲーションアルゴリズムの原理を理解し、誤差をどのように逆伝播させるかを学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 6,
-          "title": "過学習とその対策",
-          "description": "過学習の概念を理解し、それを防ぐための技術や手法を学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 7,
-          "title": "深層学習フレームワークの紹介",
-          "description": "TensorFlowやPyTorchなど、主要な深層学習フレームワークについて学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 8,
-          "title": "畳み込みニューラルネットワーク（CNN）",
-          "description": "画像処理に特化した畳み込みニューラルネットワークの構造と動作を理解する。",
-          "status": "locked"
-        },
-        {
-          "chapter": 9,
-          "title": "リカレントニューラルネットワーク（RNN）",
-          "description": "時系列データに適したリカレントニューラルネットワークの基本概念を学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 10,
-          "title": "生成モデルの基礎",
-          "description": "生成敵対ネットワーク（GAN）や変分オートエンコーダ（VAE）についての基本を理解する。",
-          "status": "locked"
-        },
-        {
-          "chapter": 11,
-          "title": "転移学習の概念",
-          "description": "転移学習の理論とその実践における利点を学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 12,
-          "title": "深層学習の応用分野",
-          "description": "自然言語処理、画像認識、音声認識など、深層学習の実際の応用例について学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 13,
-          "title": "倫理と深層学習",
-          "description": "深層学習に関連する倫理的問題や社会的影響について考察する。",
-          "status": "locked"
-        },
-        {
-          "chapter": 14,
-          "title": "最新の研究動向",
-          "description": "深層学習の現在の研究動向や未来の展望について学ぶ。",
-          "status": "locked"
-        },
-        {
-          "chapter": 15,
-          "title": "実践プロジェクトの設計",
-          "description": "実際の深層学習プロジェクトを設計し、実行するためのステップを学ぶ。",
-          "status": "locked"
-        }
-      ],
-      "current_chapter_index": 0
-    },
     "微分積分（入門）": {
       "curriculum": [
         {
@@ -444,7 +349,174 @@
         }
       ],
       "current_chapter_index": 0
+    },
+    "深層学習（入門）": {
+      "curriculum": [
+        {
+          "chapter": 1,
+          "title": "深層学習の基礎",
+          "description": "深層学習の概要とその重要性について学びます。基本的な概念や歴史的背景を理解します。",
+          "status": "unlocked",
+          "lecture_content": {
+            "lecture_text": "# 深層学習の基礎\n\n## ① 学術的背景と動機\n\n深層学習（Deep Learning）は、機械学習（Machine Learning）の一種であり、特に多層のニューラルネットワークを用いた学習手法を指します。この分野は、1940年代から現在に至るまで、様々な名称やアプローチを経て発展してきました。初期のサイバネティクスから、1980年代のコネクショニズム、そして2006年以降の深層学習の再興に至るまで、歴史的には3つの波が存在します。\n\n深層学習の重要性は、単に技術的な進歩にとどまらず、データの可用性や計算能力の向上に密接に関連しています。特に、ビッグデータの時代において、深層学習は膨大なデータを処理し、精度の高い予測を行う能力を持っています。これにより、画像認識、自然言語処理、自動運転などの分野での応用が進んでいます。\n\n先駆的な研究者としては、Geoffrey Hinton、Yoshua Bengio、Yann LeCunなどが挙げられます。彼らは深層学習の理論的基盤を築き、実際のアプリケーションにおける成功を収めました。特に、2012年のImageNetコンペティションにおけるHintonのモデルは、深層学習の商業的成功を促進しました。\n\n## ② 核心概念の体系的整理\n\n深層学習の核心概念は以下のように整理できます。\n\n1. **ニューラルネットワーク（Neural Network）**\n   - 定義: 人間の脳の神経細胞を模倣した計算モデルで、層（レイヤー）で構成される。\n   - 数式: 出力 $y$ は入力 $x$ に対して重み $W$ とバイアス $b$ を用いて次のように表される。\n   $$\n   y = f(W \\cdot x + b)\n   $$\n   ここで、$f$ は活性化関数である。\n\n2. **活性化関数（Activation Function）**\n   - 定義: ニューラルネットワークの各ノードでの出力を決定する関数。\n   - 例: シグモイド関数、ReLU（Rectified Linear Unit）など。\n   - 数式: ReLUは次のように定義される。\n   $$\n   f(x) = \\max(0, x)\n   $$\n\n3. **損失関数（Loss Function）**\n   - 定義: モデルの予測と実際の値との誤差を定量化する関数。\n   - 例: 平均二乗誤差（MSE）、交差エントロピーなど。\n   - 数式: MSEは次のように定義される。\n   $$\n   L(y, \\hat{y}) = \\frac{1}{n} \\sum_{i=1}^{n} (y_i - \\hat{y}_i)^2\n   $$\n\n4. **最適化アルゴリズム（Optimization Algorithm）**\n   - 定義: 損失関数を最小化するためにモデルのパラメータを調整する手法。\n   - 例: 確率的勾配降下法（SGD）、Adamなど。\n\n```mermaid\nmindmap\n  root\n    ニューラルネットワーク\n      活性化関数\n      損失関数\n      最適化アルゴリズム\n```\n\n## ③ 理論的詳細解説\n\n### ニューラルネットワークの数式導出\n\nニューラルネットワークは、複数の層で構成され、各層の出力が次の層の入力となります。一般的なニューラルネットワークの出力は、次のように表されます。\n\n1. 入力層から隠れ層への伝播:\n   $$ \n   z^{(l)} = W^{(l)} a^{(l-1)} + b^{(l)} \n   $$\n   $$ \n   a^{(l)} = f(z^{(l)}) \n   $$\n\n2. 出力層への伝播:\n   $$ \n   z^{(L)} = W^{(L)} a^{(L-1)} + b^{(L)} \n   $$\n   $$ \n   \\hat{y} = f(z^{(L)}) \n   $$\n\nここで、$l$は層のインデックス、$W^{(l)}$は重み行列、$b^{(l)}$はバイアスベクトル、$a^{(l)}$は層の出力、$f$は活性化関数です。\n\n### 定理の証明\n\n**定理**: 深層ニューラルネットワークは任意の連続関数を近似できる。\n\n**証明**: \n1. ニューラルネットワークは、非線形な活性化関数を用いることで、層を重ねることで複雑な関数を表現可能である。\n2. ユニバーサル近似定理により、十分な数のニューロンを持つ隠れ層を持つネットワークは、任意の連続関数を任意の精度で近似できることが示されている。\n\n### アルゴリズムの計算量解析\n\n確率的勾配降下法（SGD）の計算量は、次のように評価されます。\n- 各イテレーションでの計算量は、$O(n \\cdot d)$、ここで$n$はデータポイントの数、$d$は特徴量の次元です。\n- エポック数を$E$とすると、全体の計算量は$O(E \\cdot n \\cdot d)$となります。\n\n## ④ 実験事例・応用例\n\n深層学習の理論は、実際の応用において多くの成功を収めています。以下は代表的な実験事例です。\n\n1. **画像認識**:\n   - **設定**: ImageNetデータセットを用いた画像分類タスク。\n   - **結果**: AlexNetは2012年にImageNetコンペティションで優勝し、深層学習の商業的成功を促進しました。\n   - **ベンチマーク**: 画像認識精度は、従来の手法に比べて大幅に向上しました。\n\n2. **自然言語処理**:\n   - **設定**: 文書分類や翻訳タスクにおけるLSTM（Long Short-Term Memory）ネットワークの使用。\n   - **結果**: 従来のRNNよりも長期依存関係を学習する能力が向上しました。\n\n3. **自動運転**:\n   - **設定**: センサーからのデータを用いた物体検出。\n   - **結果**: YOLO（You Only Look Once）アルゴリズムがリアルタイムでの物体検出を実現しました。\n\n## ⑤ 批判的検討\n\n深層学習には多くの利点がある一方で、いくつかの限界や課題も存在します。\n\n1. **データ依存性**:\n   - 深層学習モデルは大量のデータを必要とし、データが不足している場合には過学習のリスクが高まります。\n\n2. **計算資源の要求**:\n   - モデルのトレーニングには高性能なハードウェアが必要であり、コストがかかります。\n\n3. **解釈性の欠如**:\n   - ブラックボックスモデルであるため、結果の解釈が難しく、特に医療や金融などの分野では問題視されています。\n\n4. **代替手法との比較**:\n   - サポートベクターマシン（SVM）や決定木などの従来の機械学習手法と比較した場合、必ずしも優位性があるわけではありません。特にデータが少ない場合には、これらの手法が有効です。\n\n今後の研究方向としては、モデルの解釈性向上や、少ないデータでの学習を可能にする手法の開発が挙げられます。\n\n## ⑥ まとめと展望\n\n本章では、深層学習の基本的な概念、歴史的背景、理論的な詳細、実験事例、批判的検討を行いました。深層学習は、現代の機械学習において重要な役割を果たしており、今後の研究や応用においても多くの可能性を秘めています。\n\n次章では、深層学習の具体的なアルゴリズムや実装について詳しく探求していきます。さらなる学習のための参考文献として、以下のリソースを推奨します。\n\n- Ian Goodfellow, Yoshua Bengio, Aaron Courville著『Deep Learning』\n- Seth Weidman著『Deep Learning from Scratch』\n- Geoffrey Hintonの講義資料や公開された論文\n\nこれらのリソースを通じて、深層学習の理解をさらに深めていくことを期待します。",
+            "source_chunks": [
+              {
+                "text": "Chapter 5\nMachine Learning Basics\nDeep learning is a speciﬁc kind of machine learning.\nIn order to understand\ndeep learning well, one must have a solid understanding of the basic principles of\nmachine learning. This chapter provides a brief course in the most important general\nprinciples that will be applied throughout the rest of the book. Novice readers or\nthose who want a wider perspective are encouraged to consider machine learning",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 114,
+                "similarity": 0.6351
+              },
+              {
+                "text": "l context. Rather than\nproviding a detailed history of deep learning, we identify a few key trends:\n• Deep learning has had a long and rich history, but has gone by many names\nreﬂecting diﬀerent philosophical viewpoints, and has waxed and waned in\npopularity.\n• Deep learning has become more useful as the amount of available training\ndata has increased.\n• Deep learning models have grown in size over time as computer infrastructure\n(both hardware and software) for deep learning has improved.",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 27,
+                "similarity": 0.579
+              },
+              {
+                "text": "unpopular for several\nyears preceding its current popularity, and because it has gone through many\ndiﬀerent names, and has only recently become called “deep learning.” The ﬁeld\nhas been rebranded many times, reﬂecting the inﬂuence of diﬀerent researchers\nand diﬀerent perspectives.\nA comprehensive history of deep learning is beyond the scope of this textbook.\nHowever, some basic context is useful for understanding deep learning. Broadly",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 29,
+                "similarity": 0.5569
+              },
+              {
+                "text": "the brain and the\nprinciples that underlie human intelligence, so machine learning models that shed\nlight on these basic scientiﬁc questions are useful apart from their ability to solve\nengineering applications.\nThe modern term “deep learning” goes beyond the neuroscientiﬁc perspective\non the current breed of machine learning models. It appeals to a more general\nprinciple of learning multiple levels of composition, which can be applied in machine",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 29,
+                "similarity": 0.5357
+              },
+              {
+                "text": "Chapter 3. Deep Learning from\nScratch\nYou may not realize it, but you now have all the mathematical and\nconceptual foundations to answer the key questions about deep learning\nmodels that I posed at the beginning of the book: you understand how\nneural networks work—the computations involved with the matrix\nmultiplications, the loss, and the partial derivatives with respect to that loss\n—as well as why those computations work (namely, the chain rule from",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning from Scratch (Seth Weidman).pdf",
+                "page_number": 67,
+                "similarity": 0.534
+              },
+              {
+                "text": "nization\n1.6\nof the book.\nWe do assume that all readers come from a computer science background. We\nassume familiarity with programming, a basic understanding of computational\nperformance issues, complexity theory, introductory level calculus and some of the\nterminology of graph theory.\n1.2\nHistorical Trends in Deep Learning\nIt is easiest to understand deep learning with some historical context. Rather than\nproviding a detailed history of deep learning, we identify a few key trends:",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 27,
+                "similarity": 0.5293
+              },
+              {
+                "text": "the\ntheoretical importance of depth (\n,\n;\n,\nBengio and LeCun 2007 Delalleau and Bengio\n2011 Pascanu\n2014a Montufar\n2014\n;\net al.,\n;\net al.,\n). At this time, deep neural\nnetworks outperformed competing AI systems based on other machine learning\ntechnologies as well as hand-designed functionality. This third wave of popularity\nof neural networks continues to the time of this writing, though the focus of deep\nlearning research has changed dramatically within the time of this wave. The",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 35,
+                "similarity": 0.5261
+              },
+              {
+                "text": "pe of this textbook.\nHowever, some basic context is useful for understanding deep learning. Broadly\nspeaking, there have been three waves of development of deep learning: deep\nlearning known as cybernetics in the 1940s–1960s, deep learning known as\nconnectionism in the 1980s–1990s, and the current resurgence under the name\ndeep learning beginning in 2006. This is quantitatively illustrated in ﬁgure\n.\n1.7\nSome of the earliest learning algorithms we recognize today were intended",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 29,
+                "similarity": 0.5237
+              },
+              {
+                "text": "Chapter 2. Fundamentals\nIn Chapter 1, I described the major conceptual building block for understanding deep learning: nested, continuous,\ndifferentiable functions. I showed how to represent these functions as computational graphs, with each node in a\ngraph representing a single, simple function. In particular, I demonstrated that such a representation showed easily\nhow to calculate the derivative of the output of the nested function with respect to its input: we simply take the",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning from Scratch (Seth Weidman).pdf",
+                "page_number": 46,
+                "similarity": 0.5221
+              },
+              {
+                "text": "This part of the book introduces the basic mathematical concepts needed to\nunderstand deep learning. We begin with general ideas from applied math that\nallow us to deﬁne functions of many variables, ﬁnd the highest and lowest points\non these functions and quantify degrees of belief.\nNext, we describe the fundamental goals of machine learning. We describe how\nto accomplish these goals by specifying a model that represents certain beliefs,",
+                "source_file": "data\\DeepLearning\\Basic Deep Learning\\Deep Learning by Ian Goodfellow, Yoshua Bengio, Aaron Courville.pdf",
+                "page_number": 46,
+                "similarity": 0.5214
+              }
+            ]
+          }
+        },
+        {
+          "chapter": 2,
+          "title": "機械学習の基礎",
+          "description": "機械学習の基本概念と種類について学び、深層学習との関係を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 3,
+          "title": "ニューラルネットワークの基本",
+          "description": "ニューラルネットワークの構造と動作原理を学びます。基本的な用語や要素を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 4,
+          "title": "活性化関数",
+          "description": "活性化関数の役割と種類について学び、各関数の特性を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 5,
+          "title": "損失関数と最適化アルゴリズム",
+          "description": "損失関数の重要性と最適化手法について学び、モデルの学習プロセスを理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 6,
+          "title": "学習率とその調整",
+          "description": "学習率の概念とその調整方法について学び、効果的な学習を実現する方法を探ります。",
+          "status": "locked"
+        },
+        {
+          "chapter": 7,
+          "title": "過学習とその対策",
+          "description": "過学習の概念とその対策について学び、モデルの汎化性能を向上させる方法を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 8,
+          "title": "畳み込みニューラルネットワーク（CNN）",
+          "description": "CNNの構造とその応用領域について学び、画像処理における役割を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 9,
+          "title": "再帰型ニューラルネットワーク（RNN）",
+          "description": "RNNの基本概念とその用途について学び、時系列データの処理方法を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 10,
+          "title": "深層学習フレームワークの紹介",
+          "description": "主要な深層学習フレームワーク（TensorFlow, PyTorchなど）について学び、使い方を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 11,
+          "title": "モデル評価とチューニング",
+          "description": "モデルの評価指標とハイパーパラメータのチューニング手法について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 12,
+          "title": "転移学習の概念",
+          "description": "転移学習の基本概念とその利点について学び、実際の応用例を考察します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 13,
+          "title": "生成モデルの紹介",
+          "description": "生成モデルの概要と代表的な手法（GANなど）について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 14,
+          "title": "深層学習の倫理と社会的影響",
+          "description": "深層学習技術の倫理的問題と社会への影響について考察します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 15,
+          "title": "深層学習の未来と展望",
+          "description": "深層学習の今後の進展とその可能性について学び、研究の方向性を考えます。",
+          "status": "locked"
+        }
+      ],
+      "current_chapter_index": 0
     }
   },
-  "last_active_course": "微分積分（入門）"
+  "last_active_course": "深層学習（入門）",
+  "user_profile": {
+    "total_exp": 50,
+    "daily_exp": 50,
+    "last_active_date": "2026-03-08",
+    "current_streak": 1,
+    "last_streak_date": "2026-03-08"
+  }
 }

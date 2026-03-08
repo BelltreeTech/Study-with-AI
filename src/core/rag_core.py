@@ -3,6 +3,23 @@
 
 PDF読み込み → チャンク分割 → Embedding生成 → ベクトル検索 → LLM回答生成
 の一連のRAG検索処理を担当する。教育コンテンツ生成ロジックは含まない。
+
+🧮 【RAG（Retrieval-Augmented Generation）のアーキテクチャ】
+RAGは、LLMの「知識の限界」を外部データベースで補完する手法。
+LLMは事前学習データに含まれない最新情報や専門知識を持たないため、
+「検索（Retrieval）」で関連文書を取得し、「生成（Generation）」のプロンプトに注入する。
+
+処理フロー:
+  1. PDF → ページ抽出 → チャンク分割（LLMのContext Window制限に対応）
+  2. 各チャンク → Embedding（高次元ベクトルへの変換）
+  3. ユーザー質問 → Query Expansion → Embedding → ハイブリッド検索（Vector + BM25）
+  4. 検索結果のチャンク → LLMのプロンプトに注入（In-Context Learning）
+  5. LLM → 根拠に基づく回答生成
+
+💡 【直感的意味】
+RAGは「試験前に教科書の該当ページを開いてから回答する学生」のようなもの。
+LLM単体は「暗記だけで答える学生」に相当し、記憶にない情報には答えられないか、
+でたらめ（ハルシネーション）を生成するリスクがある。
 """
 
 import numpy as np
@@ -37,6 +54,13 @@ class RAGCore:
 
     初期化時に指定された科目フォルダ内のPDFを自動読み込み・チャンク分割・Embedding生成し、
     query()メソッドで質問応答を行う。
+
+    🧮 【内部データ構造】
+    - _chunks: List[Dict] — 分割されたテキストチャンクのリスト
+      各要素: {"text": str, "page_number": int, "chunk_index": int, "source_file": str}
+    - _embeddings: np.ndarray — 全チャンクの埋め込みベクトル行列
+      📐 Shape: (n_chunks, embedding_dim) — 例: (500, 1536)
+    - _bm25: BM25Okapi | None — BM25キーワード検索用のインデックス
     """
 
     def __init__(self, target_subject: str) -> None:
@@ -46,17 +70,26 @@ class RAGCore:
         指定された科目のPDFを data/{target_subject}/ から読み込み、
         キャッシュを vector_stores/{target_subject}/ に保存する。
 
+        💡 【初期化の流れ】
+        1. キャッシュ確認 → 存在すれば即復元（高速起動）
+        2. キャッシュなし → PDF読み込み → チャンク分割 → Embedding生成 → キャッシュ保存
+        Embedding生成はOpenAI APIを呼ぶため、初回はネットワーク通信コストが発生する。
+
         Args:
             target_subject: 科目名（data/配下のサブフォルダ名）
         """
         from pathlib import Path
 
         self._client: OpenAI = _get_client()
+        # 📐 型: List[Dict] — チャンク情報のリスト
         self._chunks: list[dict] = []
+        # 📐 型: np.ndarray, Shape: (0,) → 初期化後: (n_chunks, embedding_dim)
         self._embeddings: np.ndarray = np.array([])
         self._subject: str = target_subject
         self._skipped_files: list[str] = []
         self.docs: list[dict] = []
+        # 💡 Janome: 日本語形態素解析エンジン。BM25のために日本語テキストを単語に分割する。
+        #    英語ではスペースで分割できるが、日本語は形態素解析が必要。
         self._tokenizer: Tokenizer = Tokenizer()
         self._bm25: BM25Okapi | None = None
 
@@ -73,7 +106,8 @@ class RAGCore:
         if not pdf_paths:
             raise FileNotFoundError(f"PDFファイルが見つかりません: {data_dir}")
 
-        # PDF組み合わせに基づくキャッシュキーを生成
+        # 💡 PDF組み合わせに基づくキャッシュキー生成
+        #    PDFファイル名とサイズからハッシュを計算し、PDFが変更されたらキャッシュを無効化する
         cache_key: str = generate_cache_key(pdf_paths)
 
         # キャッシュの読み込みを試行（科目別ディレクトリ）
@@ -117,13 +151,18 @@ class RAGCore:
         print(f"  抽出完了: 合計 {len(all_pages)} ページ")
 
         # 2. 統合されたページ群をチャンク分割
+        # 💡 LLMのContext Window（入力可能なトークン数）には上限があるため、
+        #    長い文書を適切なサイズの「チャンク」に分割して管理する
         print("2/3: チャンク分割中...")
         self._chunks = chunk_text(all_pages)
         print(f"  分割完了: {len(self._chunks)} チャンク")
 
         # 3. Embedding生成
+        # 💡 テキスト → 高次元ベクトルへの変換。OpenAIのtext-embedding-3-smallモデルを使用。
+        #    各チャンクが1536次元の「意味の座標」に変換される。
         print("3/3: Embedding生成中...")
         texts: list[str] = [c["text"] for c in self._chunks]
+        # 📐 Shape: (n_chunks, embedding_dim) — 例: (500, 1536)
         self._embeddings = generate_embeddings(texts)
         print(f"  生成完了: 形状 {self._embeddings.shape}")
 
@@ -131,15 +170,44 @@ class RAGCore:
         save_cache(self._embeddings, self._chunks, cache_key, cache_dir)
         print(f"[{target_subject}] インデックス構築完了!")
 
+    # ================================================================
+    # BM25 キーワード検索インデックス
+    # ================================================================
+
     def _build_bm25_index(self) -> None:
-        """チャンクのテキストを形態素解析しBM25インデックスを構築する。"""
+        """
+        チャンクのテキストを形態素解析しBM25インデックスを構築する。
+
+        🧮 【BM25（Best Matching 25）の数学的定義】
+        BM25スコア = Σ IDF(t) * (tf(t,d) * (k1 + 1)) / (tf(t,d) + k1 * (1 - b + b * |d| / avgdl))
+
+        ここで:
+        - IDF(t) = log((N - df(t) + 0.5) / (df(t) + 0.5)) : 逆文書頻度
+        - tf(t,d): 文書d中の語tの出現頻度
+        - k1, b: パラメータ（通常 k1=1.5, b=0.75）
+        - |d|: 文書dの長さ, avgdl: 全文書の平均長
+
+        💡 【直感的意味】
+        BM25は「キーワードがどれだけ珍しいか（IDF）」×「どれだけ多く出現するか（TF）」
+        で文書の関連度を測る、古典的だが強力な情報検索アルゴリズム。
+        ベクトル検索が「意味的な類似性」を捉えるのに対し、
+        BM25は「キーワードの一致」を捉える。両者は相補的。
+        """
         if not self._chunks:
             return
+        # 💡 Janomeで日本語テキストを単語（形態素）のリストに分割
+        # 📐 型: List[List[str]] — 例: [["勾配", "消失", "問題"], ["活性化", "関数"]]
         tokenized_corpus: list[list[str]] = [
             [token.surface for token in self._tokenizer.tokenize(chunk["text"])]
             for chunk in self._chunks
         ]
+        # 💡 BM25Okapiインデックスを構築。これはTF-IDFの改良版で、
+        #    文書長の正規化（b パラメータ）と飽和関数（k1 パラメータ）を含む。
         self._bm25 = BM25Okapi(tokenized_corpus)
+
+    # ================================================================
+    # ハイブリッド検索（Vector + BM25 + RRF）
+    # ================================================================
 
     def _hybrid_search(
         self,
@@ -149,6 +217,28 @@ class RAGCore:
     ) -> dict:
         """
         ベクトル検索とBM25検索をRRF（Reciprocal Rank Fusion）で統合する。
+
+        🧮 【RRF（Reciprocal Rank Fusion）の数学的定義】
+        RRF_score(d) = Σ 1 / (k + rank_i(d))
+
+        ここで:
+        - k = 60（定数。オリジナル論文の推奨値）
+        - rank_i(d) = ランキングシステム i における文書 d の順位（1始まり）
+
+        本実装では i ∈ {ベクトル検索, BM25} の2つのランキングを融合する。
+
+        💡 【直感的意味】
+        ベクトル検索は「意味的な近さ」を、BM25は「キーワードの一致」を捉える。
+        RRFは両方のランキングを統合することで、どちらか片方だけでは見逃す文書も拾える。
+        例えば「Transformer」という固有名詞はBM25が得意、
+        「注意機構の仕組み」という言い換えはベクトル検索が得意。
+
+        📐 【Shape の流れ】
+        query_embedding: (embedding_dim,)
+        → cosine_similarity → vec_similarities: (n_chunks,)
+        → BM25 → bm25_scores: (n_chunks,)
+        → RRF融合 → rrf_scores: List[Tuple[int, float]]
+        → Top-K選択 → results: List[Tuple[Dict, float]]
 
         戻り値の型・構造は既存のvector_search.searchと完全に互換。
 
@@ -162,35 +252,49 @@ class RAGCore:
         """
         from src.vector_search import cosine_similarity
 
-        # BM25インデックスが未構築なら構築
+        # BM25インデックスが未構築なら構築（遅延初期化パターン）
         if self._bm25 is None:
             self._build_bm25_index()
 
         n_chunks: int = len(self._chunks)
+        # 🧮 RRFの定数k。値が大きいほどランキング上位と下位のスコア差が小さくなる。
+        #    k=60はオリジナル論文（Cormack et al., 2009）の推奨値。
         k_rrfConstant: int = 60
 
-        # --- ベクトル検索 ---
+        # --- ベクトル検索（Semantic Search）---
+        # 💡 コサイン類似度で全チャンクとの意味的近さを計算
         t_cosine_start: float = time.time()
+        # 📐 Shape: (n_chunks,) — 各チャンクとのコサイン類似度
         vec_similarities: np.ndarray = cosine_similarity(query_embedding, self._embeddings)
         t_cosine_end: float = time.time()
+        # 📐 Shape: (n_chunks,) — 類似度降順のインデックス配列
         vec_ranked_indices: np.ndarray = np.argsort(vec_similarities)[::-1]
-        # インデックス -> 順位 (1始まり)
+        # 💡 インデックス → 順位のマッピングを構築（RRF計算で使用）
+        # 📐 型: Dict[int, int] — {チャンクインデックス: 順位(1始まり)}
         vec_rank_map: dict[int, int] = {int(idx): rank + 1 for rank, idx in enumerate(vec_ranked_indices)}
 
-        # --- BM25検索 ---
+        # --- BM25検索（Keyword Search）---
+        # 💡 クエリを形態素解析し、BM25スコアを計算
         tokenized_query: list[str] = [token.surface for token in self._tokenizer.tokenize(query_text)]
         if self._bm25 is not None and tokenized_query:
+            # 📐 Shape: (n_chunks,) — 各チャンクのBM25スコア
             bm25_scores: np.ndarray = self._bm25.get_scores(tokenized_query)
         else:
             bm25_scores = np.zeros(n_chunks)
+        # 📐 Shape: (n_chunks,) — BM25スコア降順のインデックス配列
         bm25_ranked_indices: np.ndarray = np.argsort(bm25_scores)[::-1]
+        # 📐 型: Dict[int, int] — {チャンクインデックス: BM25順位(1始まり)}
         bm25_rank_map: dict[int, int] = {int(idx): rank + 1 for rank, idx in enumerate(bm25_ranked_indices)}
 
         # --- RRFスコア計算 ---
+        # 🧮 RRF_score(d) = 1/(k + vec_rank(d)) + 1/(k + bm25_rank(d))
+        # 💡 各チャンクに対して、2つのランキングからのRRFスコアを合算する
         rrf_scores: list[tuple[int, float]] = []
         for i in range(n_chunks):
             v_rank: int = vec_rank_map.get(i, n_chunks)
             b_rank: int = bm25_rank_map.get(i, n_chunks)
+            # 🧮 1/(60+1) ≈ 0.0164 （1位） vs 1/(60+500) ≈ 0.0018 （500位）
+            #    上位の文書ほどスコアへの寄与が大きい（非線形な重み付け）
             rrf_score: float = (1.0 / (k_rrfConstant + v_rank)) + (1.0 / (k_rrfConstant + b_rank))
             rrf_scores.append((i, rrf_score))
 
@@ -198,6 +302,7 @@ class RAGCore:
         rrf_scores.sort(key=lambda x: x[1], reverse=True)
         top_indices: list[int] = [idx for idx, _ in rrf_scores[:top_k]]
 
+        # 📐 型: List[Tuple[Dict, float]] — [(チャンク辞書, RRFスコア), ...]
         results: list[tuple[dict, float]] = [
             (self._chunks[idx], rrf_scores_val)
             for idx, rrf_scores_val in rrf_scores[:top_k]
@@ -223,7 +328,8 @@ class RAGCore:
             "search_mode": "hybrid_rrf",
         }
 
-        # PCA 2D投影
+        # PCA 2D投影（vector_search.pyと同一ロジック）
+        # 💡 高次元ベクトル空間を2Dに射影して視覚化するためのデバッグ情報
         try:
             from sklearn.decomposition import PCA
             np_top_indices = np.array(top_indices)
@@ -277,7 +383,16 @@ class RAGCore:
         """
         LLMを用いてユーザーの質問を検索に最適なクエリに拡張する。
 
-        専門用語の英訳キーワードを補完し、ベクトル検索の精度を向上させる。
+        🧮 【Query Expansionの原理】
+        ユーザーの自然言語クエリは曖昧であることが多い。
+        例: 「勾配消失問題について教えて」→ 教科書には「Vanishing Gradient Problem」と英語で書かれている可能性。
+        LLMに専門用語の翻訳・補完を依頼し、検索クエリの「語彙のギャップ」を埋める。
+
+        💡 【直感的意味とDL概念との紐付け】
+        これはInformation Retrievalにおける「Query Expansion」技術であり、
+        近年のRAGでは「HyDE（Hypothetical Document Embedding）」など、
+        LLMを使って仮想的な回答文書を生成し、そのEmbeddingで検索する手法も存在する。
+        本実装はそのシンプル版で、キーワード補完に特化している。
 
         Args:
             question: ユーザーの元の質問文
@@ -315,6 +430,9 @@ class RAGCore:
         """
         クエリ文字列でベクトル検索を実行する。
 
+        💡 【処理フロー】
+        query → expand_query（LLMでキーワード補完）→ Embedding生成 → ハイブリッド検索
+
         Args:
             query: 検索クエリ
             top_k: 取得するチャンク数
@@ -323,6 +441,7 @@ class RAGCore:
             search結果辞書（results, debug_info）
         """
         expanded_query: str = self.expand_query(query)
+        # 📐 Shape: (embedding_dim,) — 拡張クエリの埋め込みベクトル
         query_embedding: np.ndarray = generate_embeddings([expanded_query])[0]
         search_result: dict = self._hybrid_search(
             query_embedding, expanded_query, top_k=top_k
@@ -340,6 +459,19 @@ class RAGCore:
         """
         質問に対してRAGで回答を生成する。
 
+        🧮 【RAGパイプライン全体像】
+        1. Query Expansion: LLMでクエリを拡張（語彙ギャップの解消）
+        2. Embedding: クエリをベクトル化
+        3. Hybrid Search: Vector + BM25 + RRFで関連チャンクを検索
+        4. Context Injection: 検索結果をLLMのプロンプトに注入（In-Context Learning）
+        5. LLM Generation: 根拠に基づく回答を生成
+
+        💡 【In-Context Learningとの関係】
+        LLMのプロンプトに検索結果を「コンテキスト」として注入する行為は、
+        In-Context Learning（文脈内学習）の一形態である。
+        LLMは追加学習（Fine-tuning）なしに、プロンプト内の情報を「一時的な知識」として活用できる。
+        これにより、LLMの固定された知識ベースを実質的に拡張する。
+
         Args:
             question: ユーザーの質問文
             top_k: 検索する関連チャンク数
@@ -353,21 +485,31 @@ class RAGCore:
         # クエリ拡張：LLMで専門用語の英訳キーワードを補完
         expanded_query: str = self.expand_query(question)
 
-        # 元の質問と拡張クエリの両方をEmbedding化（レイテンシ計測）
+        # 💡 元の質問と拡張クエリの両方をEmbedding化
+        #    Semantic Shift Score の計算に元の質問のEmbeddingも必要
         t_embed_start: float = time.time()
+        # 📐 Shape: (2, embedding_dim) — 2つのテキストを一括でEmbedding化
         embeddings_pair: np.ndarray = generate_embeddings([question, expanded_query])
+        # 📐 Shape: (embedding_dim,)
         original_embedding: np.ndarray = embeddings_pair[0]
         query_embedding: np.ndarray = embeddings_pair[1]
         t_embed_end: float = time.time()
 
-        # Semantic Shift Score：元クエリ↔拡張クエリのコサイン類似度
+        # 🧮 Semantic Shift Score：元クエリ↔拡張クエリのコサイン類似度
+        # 💡 Query Expansionによって意味がどれだけ「ズレた」かを定量化する指標。
+        #    1.0に近ければ意味が保存されている、0.5未満なら拡張が暴走した可能性がある。
         dot_val: float = float(np.dot(original_embedding, query_embedding))
         norm_orig: float = float(np.linalg.norm(original_embedding))
         norm_exp: float = float(np.linalg.norm(query_embedding))
         semantic_shift_score: float = dot_val / (norm_orig * norm_exp + 1e-10)
 
-        # Top-K Dimensions：質問ベクトルの絶対値上位5次元を抽出
+        # 🧮 Top-K Dimensions：質問ベクトルの絶対値上位5次元を抽出
+        # 💡 Embeddingの各次元が「意味の特定の側面」を捉えていると解釈できる。
+        #    絶対値が大きい次元は、その質問の意味を最も強く特徴づける次元。
+        #    DLではFeature Importance / Saliencyに相当する概念。
+        # 📐 Shape: (embedding_dim,)
         abs_vals: np.ndarray = np.abs(query_embedding)
+        # 📐 Shape: (5,) — 上位5次元のインデックス
         top5_indices: np.ndarray = np.argsort(abs_vals)[::-1][:5]
         top_k_dimensions: list[dict] = [
             {"dim_index": int(idx), "value": round(float(query_embedding[idx]), 6)}
@@ -385,7 +527,8 @@ class RAGCore:
         debug_info["semantic_shift_score"] = round(semantic_shift_score, 4)
         debug_info["top_k_dimensions"] = top_k_dimensions
 
-        # コンテキスト文字列を構築
+        # 💡 検索結果のチャンクテキストを結合して「コンテキスト文字列」を構築
+        #    これがLLMのプロンプトに注入される「外部知識」
         context_parts: list[str] = []
         sources: list[dict] = []
         for chunk, score in results:
@@ -403,7 +546,12 @@ class RAGCore:
 
         context: str = "\n\n---\n\n".join(context_parts)
 
-        # LLMへのプロンプト構築（style/lengthに応じて動的に生成）
+        # ================================================================
+        # LLMへのプロンプト構築（In-Context Learning）
+        # ================================================================
+        # 💡 System Promptは「AIの人格と制約」を定義するメタ命令。
+        #    User Promptは「実際のタスク（質問＋コンテキスト）」を含む。
+        #    この構造はLLMのInstruction Tuning（SFT）で学習された形式に対応する。
         if "Expert" in style:
             style_instruction: str = (
                 "大学レベルの数学（線形代数・微積分）や計算機科学の専門用語を"
@@ -424,6 +572,9 @@ class RAGCore:
         else:
             length_instruction = "標準的な段落数で、過不足なく答えてください。"
 
+        # 💡 【グラウンディング制約】
+        #    LLMがコンテキスト外の知識（事前学習で学んだ情報）を使って
+        #    ハルシネーション（もっともらしい虚偽）を生成するのを防ぐための厳格な制約。
         system_prompt: str = (
             "# 制約（最優先）\n"
             "あなたは提供された【コンテキスト】に含まれる情報『のみ』を用いて回答を構成しなければなりません。\n"
@@ -446,12 +597,18 @@ class RAGCore:
             "- \\[ \\] や \\( \\) といった括弧を用いたLaTeXデリミタは絶対に使用しないでください。"
         )
 
+        # 💡 User Promptにコンテキスト（検索結果）と質問を注入
+        #    これがIn-Context Learningの核心：プロンプト内に「教科書の該当ページ」を埋め込む
         user_prompt: str = (
             f"## コンテキスト（書籍からの抜粋）\n\n{context}\n\n"
             f"## 質問\n\n{question}"
         )
 
-        # LLM呼び出し（レイテンシ計測）
+        # ================================================================
+        # LLM呼び出しとLogprobs解析
+        # ================================================================
+        # 💡 Logprobs（対数確率）: LLMが各トークンを出力する際の「自信度」
+        #    確率が低いトークン = LLMが「自信がない」部分 = ハルシネーションの疑いがある箇所
         token_usage: dict = {}
         low_prob_tokens: list[dict] = []
         t_llm_start: float = time.time()
@@ -464,6 +621,8 @@ class RAGCore:
                 ],
                 temperature=TEMPERATURE_RAG_ANSWER,
                 max_tokens=MAX_TOKENS_RAG_ANSWER,
+                # 💡 logprobs=True: 各出力トークンの対数確率を返す
+                #    top_logprobs=1: 各位置で最も確率の高いトークンの情報を1つ返す
                 logprobs=True,
                 top_logprobs=1,
             )
@@ -475,11 +634,16 @@ class RAGCore:
                     "completion_tokens": response.usage.completion_tokens,
                     "total_tokens": response.usage.total_tokens,
                 }
-            # Logprobs解析：確率 90% 未満のトークンを抽出
+            # 🧮 Logprobs解析：exp(logprob) < 0.90 のトークンを「低確信度」として抽出
+            # 💡 logprob → probability の変換: prob = e^(logprob)
+            #    例: logprob = -0.105 → prob = 0.90 (90%)
+            #    確率90%未満のトークンはLLMが「迷っている」証拠であり、
+            #    ハルシネーション検出の手がかりになる
             k_lowProbThreshold: float = 0.90
             logprobs_content = response.choices[0].logprobs
             if logprobs_content and logprobs_content.content:
                 for token_info in logprobs_content.content:
+                    # 🧮 対数確率 → 確率への変換: prob = exp(logprob)
                     prob: float = math.exp(token_info.logprob)
                     if prob < k_lowProbThreshold:
                         low_prob_tokens.append({
@@ -490,7 +654,8 @@ class RAGCore:
             answer = f"LLM応答の生成に失敗しました: {e}"
         t_llm_end: float = time.time()
 
-        # マイクロコスト計算（USD）
+        # 💡 マイクロコスト計算（OpenAI API利用料の推定）
+        #    各モデルの料金体系に基づき、1回のクエリあたりのコストを計算
         k_embeddingCostPer1k: float = 0.00002
         k_promptCostPer1k: float = 0.00015
         k_completionCostPer1k: float = 0.0006
@@ -507,6 +672,7 @@ class RAGCore:
         # debug_infoにLLM通信ペイロードを追加
         llm_latency_sec: float = (t_llm_end - t_llm_start)
         total_tokens_count: int = token_usage.get("total_tokens", 0)
+        # 💡 Token Velocity: 1秒あたりの生成トークン数。LLMの推論速度の指標。
         token_velocity: float = total_tokens_count / llm_latency_sec if llm_latency_sec > 0 else 0.0
 
         debug_info["system_prompt"] = system_prompt

@@ -235,6 +235,35 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
     with col_title:
         st.title(f"🏫 {course_name}")
 
+    # ---- 参考書エクスポート機能 (.md) ----
+    md_lines: list[str] = [f"# {course_name} - 究極の学習ノート\n\n## 📋 目次（シラバス）\n"]
+    for ch in curriculum:
+        c_num = ch.get("chapter", "?")
+        c_title = ch.get("title", "")
+        c_desc = ch.get("description", "")
+        md_lines.append(f"- **第{c_num}章: {c_title}**\n  - {c_desc}")
+
+    md_lines.append("\n---\n\n## 📖 講義ノート\n")
+    for ch in curriculum:
+        c_num = ch.get("chapter", "?")
+        c_title = ch.get("title", "")
+        md_lines.append(f"### 第{c_num}章: {c_title}\n")
+
+        lec_data = ch.get("lecture_content")
+        if lec_data and "lecture_text" in lec_data:
+            md_lines.append(lec_data["lecture_text"] + "\n")
+        else:
+            md_lines.append("*※この章の講義ノートはまだ生成されていません。学習を進めると追記されます。*\n")
+        md_lines.append("---\n")
+
+    st.download_button(
+        label="📥 このコースを参考書としてダウンロード (.md)",
+        data="\n".join(md_lines),
+        file_name=f"{course_name}_Polymath_Note.md",
+        mime="text/markdown",
+        use_container_width=True,
+    )
+
     # ---- サイドバー: 進捗状況表示 + 章ナビゲーション ----
     with st.sidebar:
         st.divider()

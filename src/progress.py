@@ -302,3 +302,24 @@ def add_pomodoro_session(minutes: int) -> None:
     profile["focused_minutes"] = profile.get("focused_minutes", 0) + minutes
 
     _save_all_data(data)
+
+
+def get_due_reviews() -> list[dict]:
+    """今日復習すべき全科目の弱点リストを取得する。"""
+    import datetime
+    data: dict = _load_all_data()
+    due_reviews: list[dict] = []
+    today = datetime.date.today().isoformat()
+
+    for course_name, course_data in data.get("courses", {}).items():
+        for keyword, w_data in course_data.get("weaknesses", {}).items():
+            # 古いデータで next_review が無い場合は今日復習対象とする
+            next_review = w_data.get("next_review", today) if isinstance(w_data, dict) else today
+            if next_review <= today:
+                level = w_data.get("srs_level", 1) if isinstance(w_data, dict) else 1
+                due_reviews.append({
+                    "course": course_name,
+                    "keyword": keyword,
+                    "level": level,
+                })
+    return due_reviews
