@@ -384,6 +384,35 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                         st.text(chunk["text"][:400] + ("..." if len(chunk["text"]) > 400 else ""))
                         st.divider()
 
+            # --- 講義の再生成ボタン (現在の章のみ表示) ---
+            if is_viewing_current and not is_viewing_completed:
+                st.write("")  # スペーサー
+                if st.button("🔄 この講義を再生成する（表記バグ・内容修正用）", use_container_width=True):
+                    current_style = st.session_state.get("tutor_style", "🧑🏫 標準モード")
+                    require_math = st.session_state.get("require_math", False)
+                    with st.spinner(f"📝 {current_style}で講義ノートを再構築中..."):
+                        new_result: dict = ai_tutor.generate_lecture(
+                            ch_title,
+                            ch_desc,
+                            tutor_style=current_style,
+                            require_math=require_math,
+                        )
+
+                    # レクチャーデータを上書き
+                    st.session_state["current_lecture"] = new_result
+                    curriculum[current_idx]["lecture_content"] = new_result
+                    st.session_state["curriculum"] = curriculum
+
+                    # 再生成に伴い、現在の章の議論と試験状態をリセット
+                    st.session_state["lecture_chat_history"] = []
+                    st.session_state["exam_question"] = ""
+                    st.session_state["exam_ref_chunks"] = []
+                    st.session_state["exam_grading_result"] = None
+
+                    _save_current_course()
+                    st.rerun()
+            # ---------------------------------------------
+
             # ============================================================
             # ソクラテス・バトル (Socratic Debate)
             # ============================================================

@@ -95,6 +95,64 @@ def render_dashboard() -> None:
 
     st.divider()
 
+    # --- ヒートマップセクション: GitHub風「草」 ---
+    st.markdown("#### 🌿 学習ヒートマップ (過去半年)")
+    exp_history = profile.get("exp_history", {})
+
+    import datetime
+    # 過去26週分（182日）の日付データを生成
+    days_to_show = 182
+    today_date = datetime.date.today()
+    start_date = today_date - datetime.timedelta(days=days_to_show - 1)
+
+    heatmap_data = []
+    today_str = datetime.date.today().isoformat()
+    daily_exp_fallback = profile.get("daily_exp", 0)
+
+    for i in range(days_to_show):
+        target_date = start_date + datetime.timedelta(days=i)
+        target_str = target_date.isoformat()
+
+        # 今日かつ履歴が0なら、daily_expをフォールバックとして使う
+        exp_val = exp_history.get(target_str, 0)
+        if target_str == today_str and exp_val == 0:
+            exp_val = daily_exp_fallback
+
+        heatmap_data.append({
+            "date": target_date,
+            "exp": exp_val,
+            "week": i // 7,
+            "day_of_week": target_date.weekday()  # 0: Mon, 6: Sun
+        })
+
+    df_heat = pd.DataFrame(heatmap_data)
+    # y軸を曜日、x軸を週にするピボット
+    pivot_heat = df_heat.pivot(index="day_of_week", columns="week", values="exp").fillna(0)
+
+    # GitHub風のカラースケール（0の場合は薄いグレー、高いほど濃い緑）
+    github_colors = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"]
+
+    fig_heat = px.imshow(
+        pivot_heat,
+        labels=dict(x="Weeks", y="Day of Week", color="EXP"),
+        x=pivot_heat.columns,
+        y=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        color_continuous_scale=github_colors,
+        range_color=[0, max(50, df_heat["exp"].max() if not df_heat.empty else 100)],
+        aspect="auto"
+    )
+
+    fig_heat.update_layout(
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False),
+        plot_bgcolor="white",
+        margin=dict(t=10, b=10, l=40, r=10),
+        coloraxis_showscale=False,
+        hovermode="closest"
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+    st.divider()
+
     # --- ボトムセクション: レーダーチャート ---
     st.markdown("#### 🕸️ 科目別スキルバランス")
     radar_data = []

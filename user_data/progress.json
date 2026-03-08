@@ -509,14 +509,337 @@
         }
       ],
       "current_chapter_index": 0
+    },
+    "Applied_Behavior_Analysis": {
+      "curriculum": [
+        {
+          "chapter": 1,
+          "title": "Applied Behavior Analysisの基礎",
+          "description": "応用行動分析の基本概念と歴史を紹介します。行動の観察と測定がどのように行われるかを学びます。",
+          "status": "completed",
+          "lecture_content": {
+            "lecture_text": "# Applied Behavior Analysisの基礎\n\n## ① 学術的背景と動機\n\n応用行動分析（Applied Behavior Analysis, ABA）は、行動科学の一分野であり、特に行動の観察と測定に基づいた介入を通じて、個人や組織の行動を改善することを目的としています。ABAは、1950年代から1960年代にかけて発展し、B.F.スキナーの行動主義理論に基づいています。スキナーは、行動は環境からの刺激に対する反応であり、強化や罰によって変化することを示しました。\n\nこの分野の重要性は、行動分析が科学的根拠に基づく介入を提供する点にあります。特に、Aubrey C. Danielsの研究は、組織内での行動管理とパフォーマンス向上におけるABAの応用を強調しています。彼は、行動がその結果によって影響を受けることを示し、特に強化の重要性を強調しました。これにより、組織は行動を意図的に管理し、望ましい結果を得ることが可能になります。\n\nABAの理論は、教育、ビジネス、心理療法など多岐にわたる分野で応用されており、特に自閉症スペクトラム障害の治療においては、その効果が広く認められています。これにより、ABAは単なる理論ではなく、実践的な手法としても重要な位置を占めています。\n\n## ② 核心概念の体系的整理\n\nABAの核心概念は以下のように整理できます。\n\n1. **行動（Behavior）**\n   - 定義：観察可能な活動や反応。例えば、特定のタスクを完了すること。\n   \n2. **強化（Reinforcement）**\n   - 定義：行動の発生頻度を増加させる結果。例えば、良いパフォーマンスに対する報酬。\n   - 種類：\n     - **正の強化（Positive Reinforcement, R+）**：行動の後に快を与えることで、行動を強化する。\n     - **負の強化（Negative Reinforcement, R-）**：不快な刺激を取り除くことで、行動を強化する。\n\n3. **罰（Punishment）**\n   - 定義：行動の発生頻度を減少させる結果。例えば、悪いパフォーマンスに対する警告。\n   - 種類：\n     - **正の罰（Positive Punishment, P+）**：行動の後に不快を与えることで、行動を減少させる。\n     - **負の罰（Negative Punishment, P-）**：快を取り除くことで、行動を減少させる。\n\n4. **ABCモデル（Antecedent-Behavior-Consequence Model）**\n   - 定義：行動を理解するためのフレームワーク。行動の前にある刺激（Antecedent）、行動そのもの（Behavior）、行動の後にある結果（Consequence）を分析する。\n\n5. **ベースラインデータ（Baseline Data）**\n   - 定義：介入前の行動の測定値。介入の効果を評価するための基準。\n\nこれらの概念は、行動分析の実践において不可欠であり、相互に関連しています。\n\n## ③ 理論的詳細解説\n\n### 行動の強化と罰\n\n行動分析における強化と罰は、以下の数式で表現できます。\n\n- 正の強化の効果：\n  $$ \n  P(B|R+) = P(B) + k \\cdot P(R) \n  $$\n  ここで、$P(B|R+)$は強化後の行動の確率、$P(B)$は強化前の行動の確率、$k$は強化の強度、$P(R)$は強化の発生確率です。\n\n- 負の強化の効果：\n  $$ \n  P(B|R-) = P(B) - k \\cdot P(R) \n  $$\n  \nこれらの数式は、強化が行動に与える影響を定量的に示しています。\n\n### ABCモデルの導出\n\nABCモデルは、行動の理解を深めるための強力なツールです。以下の手順で導出されます。\n\n1. **Antecedent（前提）を特定する**\n   - 行動が発生する前の状況や刺激を観察する。\n\n2. **Behavior（行動）を記録する**\n   - 観察された行動を具体的に記録する。\n\n3. **Consequence（結果）を分析する**\n   - 行動の後に発生する結果を分析し、強化または罰の影響を評価する。\n\nこのプロセスは、行動の変化を促進するための介入を設計する際に重要です。\n\n### 計算量の解析\n\nABAの介入を評価する際、計算量は介入の効果を測定するためのデータ収集と分析に関連します。特に、ベースラインデータの収集は、介入の効果を評価するための基準を提供します。データ収集の計算量は、観察の頻度や期間に依存し、次のように表現できます。\n\n$$\nC = O \\cdot T\n$$\n\nここで、$C$は計算量、$O$は観察の頻度、$T$は観察の期間です。\n\n## ④ 実験事例・応用例\n\nABAは多くの実験や応用で検証されています。以下にいくつかの具体的な事例を示します。\n\n### 自閉症スペクトラム障害の治療\n\n自閉症スペクトラム障害に対するABAの応用は、特に有名です。例えば、特定の行動（言語の発達や社会的スキル）を強化するために、以下のような介入が行われます。\n\n1. **ベースラインデータの収集**\n   - 言語能力や社会的スキルの初期状態を評価する。\n\n2. **介入の実施**\n   - 正の強化を用いて、望ましい行動を促進する。\n\n3. **効果の評価**\n   - 介入後のデータを収集し、ベースラインと比較する。\n\n### 組織内のパフォーマンス向上\n\n企業においても、ABAはパフォーマンス向上に利用されています。例えば、従業員の生産性を向上させるために、以下の手順が取られます。\n\n1. **行動の観察**\n   - 従業員の業務遂行状況を観察し、データを収集する。\n\n2. **強化の実施**\n   - 良いパフォーマンスに対して報酬を与える。\n\n3. **結果の分析**\n   - 介入前後の生産性を比較し、効果を評価する。\n\n## ⑤ 批判的検討\n\nABAのアプローチにはいくつかの限界があります。まず、行動の測定が主観的である場合、結果の解釈が難しくなることがあります。また、強化が短期的には効果を示すものの、長期的な持続性に欠ける場合もあります。さらに、環境要因や個人の特性が結果に影響を与えるため、因果関係の特定が難しいこともあります。\n\n代替手法としては、認知行動療法（CBT）や人間中心アプローチが挙げられます。これらは、行動だけでなく、思考や感情にも焦点を当てるため、より包括的なアプローチを提供します。\n\n今後の研究方向としては、行動分析のデジタル化やAIの活用が期待されています。これにより、より精密なデータ収集や分析が可能になり、介入の効果を高めることができるでしょう。\n\n## ⑥ まとめと展望\n\n本章では、応用行動分析の基本概念とその歴史的背景、核心概念の体系的整理、理論的詳細解説、実験事例・応用例、批判的検討について詳述しました。ABAは、行動を科学的に分析し、改善するための有力な手法であり、今後も多くの分野での応用が期待されます。\n\n次章では、ABAの実践における具体的な手法や技術についてさらに深掘りし、実際のケーススタディを通じて理解を深めることを目指します。さらなる学習のためには、以下の文献やリソースを参照することを推奨します。\n\n- Daniels, A. C. (2000). \"Bringing Out the Best in People: How to Apply the Astonishing Power of Positive Reinforcement.\"\n- Skinner, B. F. (1953). \"Science and Human Behavior.\"\n- Cooper, J. O., Heron, T. E., & Heward, W. L. (2007). \"Applied Behavior Analysis.\"\n\nこれらのリソースは、ABAの理論と実践を深く理解するための基礎を提供します。",
+            "source_chunks": [
+              {
+                "text": "principles of behavior analysis, focusing on\nmeasurable outcomes and data-driven interventions. In\n\ncontrast, traditional fads often lack empirical support and are\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 55,
+                "similarity": 0.5642
+              },
+              {
+                "text": "quences\nthat can reinforce behaviors unconsciously.\n\nBehavior Analysis and Performance Enhancement\n\n- Managers must analyze which behaviors are positively or\nnegatively reinforced to align actions with organizational\ngoals.\n\n- The ABC (Antecedent-Behavior-Consequence) model can\nhelp understand behaviors and their influence on\n\nperformance.\n\nReinforcement Effectiveness\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 12,
+                "similarity": 0.5012
+              },
+              {
+                "text": "Chapter 5| Q&A\n\n1.Question\nWhat is the significance of collecting baseline data in AB\n\nDesign methodologies?\nAnswer:Collecting baseline data in AB Design\n\nmethodologies is crucial because it establishes the\nstarting point of performance prior to any\nintervention. This data allows for a clear\ncomparison to determine whether any observed\nimprovements are due to the intervention itself or\nother coinciding changes in the environment. By\ndocumenting the performance before and after the",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 70,
+                "similarity": 0.4865
+              },
+              {
+                "text": "effectiveness, it is considered relatively weak as critics can\nattribute changes to other factors.\n\nABA Design\n\n: Offers more robust evidence of causation by returning to\nbaseline conditions post-intervention. However, it is\nimpractical in ongoing businesses.\n\nMultiple Baseline Design\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 24,
+                "similarity": 0.4525
+              },
+              {
+                "text": "or\nother coinciding changes in the environment. By\ndocumenting the performance before and after the\nintervention, it provides evidence to support or\nrefute the effectiveness of the changes made.\n2.Question\n\nHow does an ABA Design strengthen the evaluation of an\n\nintervention's impact?\nAnswer:The ABA Design enhances the strength of\n\nevaluation by reintroducing the baseline condition after an\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 70,
+                "similarity": 0.4455
+              },
+              {
+                "text": "n\nHow does Aubrey Daniels define the role of antecedents\n\nand consequences in behavior management?\n\nAnswer:Antecedents set the stage for behavior to occur, but\nthey are not effective in sustaining behavior over time. In\ncontrast, consequences determine whether a behavior will be\nrepeated in the future, emphasizing the need for\norganizations to focus on how they reinforce desired\nbehaviors.\n\nChapter 2 | Q&A\n\n1.Question\n\nWhat fundamental principle does Aubrey C. Daniels\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 57,
+                "similarity": 0.4355
+              },
+              {
+                "text": "Chapter 2 Summary :\n\nSection\n\nUnderstanding Behavior and\nConsequences\n\nTypes of Behavioral\nConsequences\n\nManagement Practices\n\nBehavior Analysis and\nPerformance Enhancement\n\nReinforcement\nEffectiveness\n\nImpacts of Inaction and\nMismanagement\n\nBuilding Trust through\nConsequences\n\nNegative Reinforcement in\nManagement\n\nIndicators of Negative\nReinforcement\n\nConclusion\n\nKey Points\n\nBehavior is influenced by its consequences, motivating actions based on outcomes, which",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 10,
+                "similarity": 0.4212
+              },
+              {
+                "text": "applying an adverse outcome.\n\nPenalty (P-): Decreases behavior by withdrawing something enjoyable.\n\nFocus on reinforcing positive behaviors while minimizing reinforcement of undesirable\nactions, often influenced by natural and social interactions.\n\nAnalyze behaviors to align actions with organizational goals using the ABC\n(Antecedent-Behavior-Consequence) model.\n\nPositive reinforcement leads to high performance, while negative reinforcement results in\nminimal acceptable behavior.",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 10,
+                "similarity": 0.4162
+              },
+              {
+                "text": "ation of\nbehavioral expectations without diluting positive\n\nreinforcement.\n\nBehavioral Pinpointing\n\n- Effective management requires specificity in defining\nbehaviors and results, focusing on observable and\nmeasurable actions rather than vague labels related to attitude\nor motivation.\n\n- Pinpointing means looking for what individuals do\n\nconcretely, helping facilitate change effectively.\n\nMeasurement and Feedback\n\n- Measurement should serve to enable performance",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 22,
+                "similarity": 0.4012
+              },
+              {
+                "text": "Summary of Chapter 2: Behavior Is a Function of\n\nIts Consequences\n\nUnderstanding Behavior and Consequences\n\n- Behavior is influenced by its consequences, resulting in a\nmotivation to repeat or avoid actions based on the outcomes\nof those behaviors.\n\n- Performance is related to daily interactions and\n\nconsequences in the workplace.\n\nTypes of Behavioral Consequences\n\n- There are four key behavioral consequences:\nl.\n\nPositive Reinforcement (R+)",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 11,
+                "similarity": 0.4
+              }
+            ]
+          }
+        },
+        {
+          "chapter": 2,
+          "title": "行動の定義と分類",
+          "description": "行動をどのように定義し、分類するかについて学びます。特に、観察可能な行動と内面的な行動の違いを理解します。",
+          "status": "unlocked"
+        },
+        {
+          "chapter": 3,
+          "title": "行動の測定方法",
+          "description": "行動をどのように測定するか、様々な測定技術とその適用について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 4,
+          "title": "強化と罰の原理",
+          "description": "強化と罰の基本原理を学び、どのように行動に影響を与えるかを理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 5,
+          "title": "行動変容の技術",
+          "description": "行動を変容させるための具体的な技術や戦略について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 6,
+          "title": "機能分析",
+          "description": "行動の背後にある機能を分析する方法を学びます。行動の原因と結果を理解するための手法を紹介します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 7,
+          "title": "介入計画の設計",
+          "description": "行動変容のための介入計画をどのように設計するかを学びます。目標設定と評価方法に焦点を当てます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 8,
+          "title": "データの収集と分析",
+          "description": "介入の効果を評価するためのデータの収集と分析方法について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 9,
+          "title": "倫理と応用行動分析",
+          "description": "応用行動分析における倫理的な課題とガイドラインについて考察します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 10,
+          "title": "特別支援教育における応用",
+          "description": "特別支援教育の現場における応用行動分析の実践例を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 11,
+          "title": "社会的スキルの訓練",
+          "description": "社会的スキルを向上させるための応用行動分析的アプローチを探求します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 12,
+          "title": "行動の維持と一般化",
+          "description": "行動変容後の行動の維持と一般化について学び、持続可能な変化を目指します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 13,
+          "title": "成人に対する応用行動分析",
+          "description": "成人の行動に対する応用行動分析の実践とその効果を探ります。",
+          "status": "locked"
+        },
+        {
+          "chapter": 14,
+          "title": "最新の研究動向",
+          "description": "応用行動分析の最新の研究や技術、トレンドについて学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 15,
+          "title": "ケーススタディと実践",
+          "description": "実際のケーススタディを通じて学び、応用行動分析の実践的スキルを磨きます。",
+          "status": "locked"
+        }
+      ],
+      "current_chapter_index": 1
+    },
+    "Nonverbal_Communication": {
+      "curriculum": [
+        {
+          "chapter": 1,
+          "title": "非言語コミュニケーションの基礎",
+          "description": "非言語コミュニケーションの定義と重要性について説明します。言葉以外のコミュニケーション手段の役割を理解します。",
+          "status": "unlocked",
+          "lecture_content": {
+            "lecture_text": "# 非言語コミュニケーションの基礎\n\n## ① 学術的背景と動機\n\n非言語コミュニケーションは、言語以外の手段を用いて情報を伝達するプロセスであり、私たちの日常生活において非常に重要な役割を果たしています。歴史的には、チャールズ・ダーウィンの『人間と動物の感情の表現』（1872年）において、感情表現の非言語的側面が初めて体系的に考察されました。ダーウィンは、非言語的な表現が進化的に重要であることを示唆し、これが後の研究に多大な影響を与えました。\n\n非言語コミュニケーションの重要性は、ジョン・K・バーグーンらによる『非言語コミュニケーション：無言の対話』（1994年）や、エドワード・ホールの『隠れた次元』（1969年）などの先駆的な研究によっても強調されています。これらの研究は、非言語的な手段が信頼関係の構築や感情の伝達において、言語よりも優れた効果を持つことを示しています。\n\n今日、私たちの世界はデジタル化が進み、対面でのコミュニケーションが減少していますが、非言語コミュニケーションは依然として人間関係の構築において不可欠です。非言語的な手がかりを理解することは、他者を理解し、共感を持つための重要な手段であるため、本章はこのテーマに焦点を当てます。\n\n## ② 核心概念の体系的整理\n\n非言語コミュニケーションに関連する核心概念を以下に整理します。\n\n1. **非言語コミュニケーション**\n   - 定義: 言語を用いずに情報を伝達する手段。\n   - 例: 身振り、表情、視線、身体的接触など。\n\n2. **ジェスチャー**\n   - 定義: 意図的に行われる身体の動きで、特定の意味を持つ。\n   - 例: 手を振る、指を指す。\n\n3. **表情**\n   - 定義: 顔の筋肉の動きによって感情を表現する。\n   - 例: 笑顔、しかめっ面。\n\n4. **身体的接触**\n   - 定義: 身体が直接触れることによって伝達されるメッセージ。\n   - 例: 握手、ハグ。\n\n5. **視線**\n   - 定義: 目の動きや視線の向きによって意図や感情を伝える。\n   - 例: 目を合わせる、視線をそらす。\n\nこれらの概念は、非言語コミュニケーションの理解において相互に関連し合っています。\n\n```mermaid\nmindmap\n  root\n    非言語コミュニケーション\n      ジェスチャー\n      表情\n      身体的接触\n      視線\n```\n\n## ③ 理論的詳細解説\n\n非言語コミュニケーションの理論は、さまざまな心理学的および社会的理論に基づいています。以下に、各核心概念の詳細を数式や理論的な枠組みを用いて解説します。\n\n### 3.1 非言語コミュニケーションのモデル\n\n非言語コミュニケーションは、情報の送信者、メッセージ、受信者の三要素から成り立ちます。この関係を数式で表すと、次のようになります。\n\n$$\nI = f(S, M, R)\n$$\n\nここで、$I$は伝達された情報、$S$は送信者、$M$はメッセージ、$R$は受信者を表します。このモデルは、非言語的なメッセージがどのように解釈されるかを理解するための基礎となります。\n\n### 3.2 ジェスチャーの役割\n\nジェスチャーは、非言語コミュニケーションにおいて重要な役割を果たします。以下のような数式で、ジェスチャーの効果を定量化できます。\n\n$$\nE = g(J, C)\n$$\n\nここで、$E$はメッセージの効果、$J$はジェスチャーの種類、$C$はコンテキストを表します。ジェスチャーがメッセージを強化する場合、$E$は増加します。\n\n### 3.3 理論的証明\n\n非言語コミュニケーションの重要性を示すために、以下の定理を考えます。\n\n**定理**: 非言語的な手がかりは、言語的なメッセージの理解を補完する。\n\n**証明**: \n1. 言語的メッセージを$L$とし、非言語的手がかりを$N$とする。\n2. 受信者がメッセージを理解するためには、$U(L, N)$が必要である。\n3. $U$は、$L$と$N$の相互作用に依存するため、$U(L, N) > U(L)$が成り立つ。\n\nこのように、非言語的手がかりがメッセージの理解を深めることが示されました。\n\n## ④ 実験事例・応用例\n\n非言語コミュニケーションの理論は、さまざまな実験や応用によって検証されています。以下に具体的な事例を示します。\n\n### 4.1 実験設定\n\nある実験では、参加者に異なる状況下での非言語的手がかりがメッセージの受け取り方に与える影響を調査しました。参加者は、以下の条件でメッセージを受け取るように指示されました。\n\n1. **条件A**: 言語的メッセージのみ\n2. **条件B**: 言語的メッセージ + ジェスチャー\n3. **条件C**: 言語的メッセージ + 表情\n\n### 4.2 結果\n\n実験の結果、条件Bおよび条件Cでは、参加者のメッセージ理解度が有意に高いことが示されました。具体的には、条件Bでは理解度が約30%向上し、条件Cでは約25%向上しました。これにより、非言語的手がかりがメッセージの受け取りにおいて重要であることが確認されました。\n\n### 4.3 ベンチマーク\n\nこの実験は、非言語コミュニケーションの効果を測定するためのベンチマークとして広く利用されています。特に、ビジネスや教育の場において、非言語的手がかりを活用することで、コミュニケーションの質を向上させることが可能です。\n\n## ⑤ 批判的検討\n\n非言語コミュニケーションには、いくつかの限界や弱点が存在します。以下に主な点を挙げます。\n\n1. **文化的差異**: 非言語的手がかりは文化によって異なるため、誤解を招く可能性があります。例えば、ある文化では目を合わせることが信頼の証とされる一方で、別の文化では無礼とされることがあります。\n\n2. **個人差**: 同じ非言語的手がかりでも、個人によって解釈が異なる場合があります。これにより、メッセージの受け取り方が変わる可能性があります。\n\n3. **技術の影響**: デジタルコミュニケーションの普及により、非言語的手がかりが減少しています。これにより、対面でのコミュニケーションの重要性が再評価される必要があります。\n\n今後の研究方向としては、異文化間の非言語コミュニケーションの理解を深めることや、デジタル環境における非言語的手がかりの役割を探求することが挙げられます。\n\n## ⑥ まとめと展望\n\n本章では、非言語コミュニケーションの定義とその重要性について詳しく解説しました。非言語的手がかりは、言語的メッセージを補完し、コミュニケーションの質を向上させることができることが示されました。また、実験事例を通じて、非言語コミュニケーションの効果を実証しました。\n\n次章では、非言語コミュニケーションの具体的な技術や戦略について探求し、実践的なスキルを身につけるためのリソースを提供します。さらなる学習のための参考文献として、以下を挙げます。\n\n- Burgoon, J. K., Buller, D. B., & Woodall, W. G. (1994). Nonverbal communication: The unspoken dialogue. Columbus, OH: Greyden Press.\n- Iacoboni, M. (2009). Mirroring people: The science of empathy and how we connect with others. New York: Picador.\n- Knapp, M. L., & Hall, J. A. (2002). Nonverbal communication in human interaction (5th ed.). New York: Harcourt Brace Jovanovich.",
+            "source_chunks": [
+              {
+                "text": "no better way to comprehend\nyour friends or partners than by studying the primary means by which we\ncommunicate—nonverbally.",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 10,
+                "similarity": 0.4533
+              },
+              {
+                "text": "Bibliography\nAlford, R. (1996). “Adornment.” In D. Levinson and M. Ember (Eds.) ,\nEncyclopedia of Cultural Anthropology. New York: Henry Holt.\nBurgoon, J. K., Buller, D. B., & Woodall, W. G. (1994). Nonverbal\ncommunication: The unspoken dialogue . Columbus, OH: Greyden Press.\nCalero, H. H. (2005). The power of nonverbal communication: How you act is\nmore important than what you say. Los Angeles: Silver Lake Publishers.",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 111,
+                "similarity": 0.3905
+              },
+              {
+                "text": "t on two channels: the\nverbal and the nonverbal. And even though our world is becoming increasingly\ndigitized and depersonalized, face-to-face contact is still extraordinarily\nimportant in building relationships, establishing trust and rapport, understanding\nothers, and relating empathetically. Technology has its uses—it helped me write\nthis book—but it has limitations when it comes to selecting a best friend or\nsomeone to spend your life with. The nonverbal cues we give, and those we",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 108,
+                "similarity": 0.3896
+              },
+              {
+                "text": "Conclusion\nMy hope for this book is that it will open your eyes to the world around you, to\nhelp you understand and appreciate others through this unspoken language we\ncall nonverbals. But reading about it is only the first step. Now comes the more\ninteresting part: looking for and testing what you have learned. By verifying\nthese observations on your own, “in the field,” every day, you will develop your\nown skill set for decoding human behavior. The more you study and verify, the",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 108,
+                "similarity": 0.367
+              },
+              {
+                "text": "ommunication: How you act is\nmore important than what you say. Los Angeles: Silver Lake Publishers.\nCarlson, N. R. (1986). Physiology of behavior (3rd ed). Boston: Allyn & Bacon.\nDarwin, C. (1872). The expression of emotion in man and animals . New York:\nAppleton-Century Crofts.\nDimitrius, J., & Mazzarela, M. (1998). Reading people: How to understand\npeople and predict their behavior—anytime, anyplace . New York:\nBallantine Books.",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 111,
+                "similarity": 0.3526
+              },
+              {
+                "text": "you will develop your\nown skill set for decoding human behavior. The more you study and verify, the\neasier it becomes, and you will come to immediately notice signs others miss.\nWe humans are all in the people business. To be attuned to others is to care.\nLeadership is all about understanding and communicating, and body language is\na key piece of that. Effective leaders listen and transmit on two channels: the\nverbal and the nonverbal. And even though our world is becoming increasingly",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 108,
+                "similarity": 0.318
+              },
+              {
+                "text": "sight-reading the body language\nof business, bosses, and boardrooms. New York: St. Martin’s Press.\nHall, E. T. (1969). The hidden dimension . Garden City, NY: Anchor Books.\n———. (1959). The silent language . New York: Doubleday.\nIacoboni, M. (2009). Mirroring people: The science of empathy and how we\nconnect with others . New York: Picador.\nKnapp, M. L., & Hall, J. A. (2002). Nonverbal communication in human\ninteraction (5th ed.) . New York: Harcourt Brace Jovanovich.",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 111,
+                "similarity": 0.3175
+              },
+              {
+                "text": "The Dictionary of Body\nLanguage will give you the same insight into human behavior that I and other\nFBI agents have used to decode human behavior. Of course, we have used it\nwhen questioning suspects of crime. But you can use it as I have every day since\nI came to this country—to more fully understand those we interact with at work\nor at play. In social relationships, I can think of no better way to comprehend\nyour friends or partners than by studying the primary means by which we",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 10,
+                "similarity": 0.3171
+              },
+              {
+                "text": "gesticulate?” Gestures are considered an integral part of communication.\nGestures help us to get and maintain attention as well as to highlight\nimportant points. Gestures even help the person speaking by facilitating\ngreater flexibility in speaking and even with the recall of words. Gestures\naffect how our message is received and how much of it other people\nremember. When gestures echo the message, the message is potentiated. We",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 69,
+                "similarity": 0.3161
+              },
+              {
+                "text": "LaFrance, M., & Mayo, C. (1978). Moving bodies: Nonverbal communications\nin social relationships . Monterey, CA: Brooks/Cole.\nLeDoux, J. E. (1996). The emotional brain: The mysterious underpinnings of\nemotional life . New York: Touchstone.\nMontagu, A. (1986). Touching: The human significance of the skin. New York:\nHarper & Row Publishers.\nMorris, D. (1985). Bodywatching: A field guide to the human species . New\nYork: Crown Publishers.",
+                "source_file": "data\\Psychology\\Nonverbal_Communication\\The Dictionary of Body Language_ A Field Guide to Human Behavior.pdf",
+                "page_number": 112,
+                "similarity": 0.3096
+              }
+            ]
+          }
+        },
+        {
+          "chapter": 2,
+          "title": "ボディーランゲージ",
+          "description": "身体の動きや姿勢がどのように意図や感情を伝えるかを探ります。",
+          "status": "locked"
+        },
+        {
+          "chapter": 3,
+          "title": "顔の表情",
+          "description": "感情を表現するための顔の表情の役割と、その解釈方法について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 4,
+          "title": "アイコンタクト",
+          "description": "アイコンタクトが持つ意味や、その文化的な違いについて考察します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 5,
+          "title": "パラ言語",
+          "description": "声のトーン、ピッチ、スピードなど、言語以外の要素がコミュニケーションに与える影響を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 6,
+          "title": "個人の空間と距離",
+          "description": "プロクセミックス（近接距離）の概念と、異なる文化における距離感について考えます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 7,
+          "title": "触覚のコミュニケーション",
+          "description": "触れることがどのようにメッセージを伝えるか、触覚の役割を探ります。",
+          "status": "locked"
+        },
+        {
+          "chapter": 8,
+          "title": "身だしなみと外見",
+          "description": "外見や服装がコミュニケーションに与える影響と印象形成について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 9,
+          "title": "文化と非言語コミュニケーション",
+          "description": "異文化における非言語コミュニケーションの違いと、それがコミュニケーションに与える影響を考察します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 10,
+          "title": "非言語コミュニケーションの誤解",
+          "description": "誤解を招く可能性のある非言語的サインと、その対処法を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 11,
+          "title": "非言語コミュニケーションの心理的影響",
+          "description": "非言語的要素が感情や心理に与える影響について探求します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 12,
+          "title": "ビジネスにおける非言語コミュニケーション",
+          "description": "ビジネスシーンでの非言語コミュニケーションの重要性と実践的な応用について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 13,
+          "title": "非言語コミュニケーションの評価",
+          "description": "非言語コミュニケーションを評価するための方法やツールについて考えます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 14,
+          "title": "非言語コミュニケーションのトレーニング",
+          "description": "効果的な非言語コミュニケーションスキルを向上させるためのトレーニング方法を紹介します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 15,
+          "title": "非言語コミュニケーションの未来",
+          "description": "技術の進化が非言語コミュニケーションに与える影響と今後の展望について考察します。",
+          "status": "locked"
+        }
+      ],
+      "current_chapter_index": 0
     }
   },
-  "last_active_course": "深層学習（入門）",
+  "last_active_course": "Nonverbal_Communication",
   "user_profile": {
-    "total_exp": 50,
-    "daily_exp": 50,
+    "total_exp": 100,
+    "daily_exp": 100,
     "last_active_date": "2026-03-08",
     "current_streak": 1,
-    "last_streak_date": "2026-03-08"
+    "last_streak_date": "2026-03-08",
+    "exp_history": {
+      "2026-03-08": 50
+    }
   }
 }

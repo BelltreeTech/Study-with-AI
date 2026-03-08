@@ -226,20 +226,21 @@ import datetime
 
 
 def add_exp(course_name: str, exp_amount: int) -> None:
-    """EXPを加算し、日次リセット判定を行う。"""
+    """EXPを加算し、日次リセット判定と履歴（ヒートマップ用）の記録を行う"""
     data = _load_all_data()
     today = datetime.date.today().isoformat()
 
     if "user_profile" not in data:
         data["user_profile"] = {
-            "total_exp": 0,
-            "daily_exp": 0,
-            "last_active_date": today,
-            "current_streak": 0,
-            "last_streak_date": "",
+            "total_exp": 0, "daily_exp": 0, "last_active_date": today,
+            "current_streak": 0, "last_streak_date": "", "exp_history": {}
         }
 
     profile = data["user_profile"]
+
+    # 履歴データの初期化（古いバージョンからの互換性確保）
+    if "exp_history" not in profile:
+        profile["exp_history"] = {}
 
     # 日付が変わっていたらデイリーEXPをリセット
     if profile.get("last_active_date") != today:
@@ -249,7 +250,12 @@ def add_exp(course_name: str, exp_amount: int) -> None:
     profile["total_exp"] = profile.get("total_exp", 0) + exp_amount
     profile["daily_exp"] = profile.get("daily_exp", 0) + exp_amount
 
+    # --- ヒートマップ用履歴の記録 ---
+    profile["exp_history"][today] = profile["exp_history"].get(today, 0) + exp_amount
+
     # コースごとのEXP
+    if "courses" not in data:
+        data["courses"] = {}
     if course_name not in data["courses"]:
         data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
     data["courses"][course_name]["exp"] = data["courses"][course_name].get("exp", 0) + exp_amount

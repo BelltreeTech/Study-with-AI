@@ -236,7 +236,7 @@ def main() -> None:
         st.header("🧭 モード")
         app_mode: str = st.radio(
             "モード選択",
-            ["📊 マイページ (Dashboard)", "🔍 知識検索 (RAG)", "🎓 模擬試験 (Feynman Drill)", "🏫 カリキュラム学習 (Curriculum)"],
+            ["📊 マイページ (Dashboard)", "🔍 知識検索 (RAG)", "🎓 模擬試験 (Feynman Drill)", "🏫 カリキュラム学習 (Curriculum)", "📚 知識の書庫 (Library)"],
             index=0,
             label_visibility="collapsed",
         )
@@ -284,6 +284,9 @@ def main() -> None:
     if app_mode == "📊 マイページ (Dashboard)":
         from src.views.view_dashboard import render_dashboard
         render_dashboard()
+    elif app_mode == "📚 知識の書庫 (Library)":
+        from src.views.view_library import render_library
+        render_library()
     elif app_mode == "🔍 知識検索 (RAG)":
         render_rag_mode(rag_core, debug_mode, top_k, style, length)
     elif app_mode == "🎓 模擬試験 (Feynman Drill)":
