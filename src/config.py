@@ -80,8 +80,8 @@ MAX_TOKENS_LECTURE: int = 8000
 # 試験 合格ライン
 # ==============================================================
 PASS_SCORE_EASY: int = 70
-PASS_SCORE_NORMAL: int = 90
-PASS_SCORE_HARD: int = 95
+PASS_SCORE_NORMAL: int = 80
+PASS_SCORE_HARD: int = 90
 
 PASS_SCORES: dict[str, int] = {
     "Easy": PASS_SCORE_EASY,

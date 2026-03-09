@@ -42,6 +42,7 @@ from src.config import (
     MAX_TOKENS_LECTURE,
     QUIZ_TOP_K,
     LECTURE_TOP_K,
+    PASS_SCORES,
 )
 
 
@@ -301,35 +302,34 @@ class AITutor:
         require_math: bool = False,
     ) -> dict:
         """
-        ユーザーの回答をLLMが採点する。
-
-        🧠 【Structured Output Parsingの実践】
-        LLMの自由形式テキストから、正規表現で「スコア」と「弱点キーワード」を抽出する。
-        これはLLMの出力をプログラムで処理可能な構造化データに変換する技術。
-        OpenAIのJSON ModeやFunction Callingの代替として、
-        プロンプトで出力形式を指定し、正規表現で解析するアプローチ。
+        ユーザーの回答をLLMを用いて採点し、フィードバックとスコアを返す。
 
         Args:
-            question: 出題された問題文
-            user_answer: ユーザーの回答テキスト
-            reference_context: 正解の根拠となるコンテキスト
-            difficulty: 難易度（"Easy" / "Normal" / "Hard"）
-            require_math: 計算・数式導出モードの有効/無効
+            question: 出題された問題
+            user_answer: ユーザーの入力回答
+            reference_context: 採点の根拠となるテキスト（正解）
+            difficulty: "Easy" | "Normal" | "Hard"
+            require_math: 計算・数式式の厳密評価を求めるか
 
         Returns:
-            {"score": int, "feedback_text": str, "weaknesses": list[str]}
+            {
+                "score": 0~100,
+                "feedback_text": "LLMの自然言語フィードバック（MD）",
+                "weaknesses": ["キーワードA", "キーワードB"]  # 抽出された弱点
+            }
         """
+        pass_line = PASS_SCORES.get(difficulty, PASS_SCORES["Normal"])
+
         # 難易度別採点プロンプト
         if difficulty == "Easy":
-            grading_system_prompt: str = (
-                "あなたは優しい大学教授です。学部生の基礎テストを採点してください。\n"
+            grading_system_prompt = (
+                "あなたは親切で励ましてくれる大学のティーチングアシスタントです。\n"
                 "学生の回答を、以下の「正解の根拠」と比較し、採点してください。\n\n"
                 "【試験構成】100点満点\n"
-                "- パートA（用語確認）: 各5点 × 10問 = 50点\n"
-                "- パートB（短答記述）: 各10点 × 5問 = 50点\n\n"
-                "【採点基準（合格ライン70点 / やや甘め）】\n"
-                "- パートA: 正答は満点。惜しい誤答に部分点(2点)可。\n"
-                "- パートB: 要点が含まれていれば高得点。完璧でなくても概念を理解していれば7割以上。\n\n"
+                "- パートA（選択・短答）: 各10点 × 10問 = 100点\n\n"
+                f"【採点基準（合格ライン{pass_line}点）】\n"
+                "- 正確に答えられている部分には積極的に部分点（5点など）を与えてください。\n"
+                "- 些細な言い回しの違いは減点対象としません。\n\n"
                 "【出力形式】\n"
                 "## スコア: XX点\n\n"
                 "## 採点詳細\n"
@@ -350,7 +350,7 @@ class AITutor:
                 "【試験構成】100点満点\n"
                 "- パートA（批判的分析）: 各20点 × 2問 = 40点\n"
                 "- パートB（統合論述）: 各30点 × 2問 = 60点\n\n"
-                "【採点基準（合格ライン95点 / 極めて厳格）】\n"
+                f"【採点基準（合格ライン{pass_line}点 / 極めて厳格）】\n"
                 "- パートA: 各20点を以下で採点:\n"
                 "  - 批判的洞察（10点）: 独自の視点・深い考察がなければ0点\n"
                 "  - 論理的整合性（5点）: 矛盾があれば即0点\n"
@@ -381,7 +381,7 @@ class AITutor:
                 "【試験構成】100点満点\n"
                 "- パートA（選択問題）: 各4点 × 5問 = 20点\n"
                 "- パートB（記述論述）: 各16点 × 5問 = 80点\n\n"
-                "【採点基準（合格ライン90点）】\n"
+                f"【採点基準（合格ライン{pass_line}点）】\n"
                 "- パートA: 正答のみ満点。誤答は0点。部分点なし。\n"
                 "- パートB: 各問16点を以下の4軸で採点:\n"
                 "  - 正確性（4点）: 事実の誤りがあれば即0点\n"

@@ -29,9 +29,16 @@ def _load_all_data() -> dict:
     try:
         raw: str = k_progressFile.read_text(encoding="utf-8")
         data: dict = json.loads(raw)
+        
         # 旧フォーマットからのマイグレーション
         if "courses" not in data:
-            return _migrate_legacy(data)
+            data = _migrate_legacy(data)
+            
+        # 汚染データ「集中学習」の自動クリーンアップ
+        if "courses" in data and "集中学習" in data["courses"]:
+            del data["courses"]["集中学習"]
+            _save_all_data(data)
+            
         return data
     except Exception as e:
         print(f"[Progress] 読み込みに失敗: {e}")
@@ -253,12 +260,13 @@ def add_exp(course_name: str, exp_amount: int) -> None:
     # --- ヒートマップ用履歴の記録 ---
     profile["exp_history"][today] = profile["exp_history"].get(today, 0) + exp_amount
 
-    # コースごとのEXP
-    if "courses" not in data:
-        data["courses"] = {}
-    if course_name not in data["courses"]:
-        data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
-    data["courses"][course_name]["exp"] = data["courses"][course_name].get("exp", 0) + exp_amount
+    # コースごとのEXP（course_name が None/空欄 でない場合のみ科目として加算）
+    if course_name:
+        if "courses" not in data:
+            data["courses"] = {}
+        if course_name not in data["courses"]:
+            data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
+        data["courses"][course_name]["exp"] = data["courses"][course_name].get("exp", 0) + exp_amount
 
     _save_all_data(data)
 

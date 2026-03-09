@@ -101,7 +101,7 @@ class RAGCore:
         if not data_dir.exists():
             raise FileNotFoundError(f"科目ディレクトリが見つかりません: {data_dir}")
         pdf_paths: list[str] = sorted(
-            str(p) for p in data_dir.glob("*.pdf")
+            str(p) for p in data_dir.rglob("*.pdf")
         )
         if not pdf_paths:
             raise FileNotFoundError(f"PDFファイルが見つかりません: {data_dir}")

@@ -54,6 +54,91 @@ def _get_cache_info(subject: str) -> dict:
     }
 
 
+def _build_index_pipeline(target_subject: str) -> None:
+    """指定された科目のPDF群からインデックスを構築する一連のパイプライン処理。"""
+    target_dir = Path(DATA_DIR) / target_subject
+    pdf_paths = sorted(str(p) for p in target_dir.rglob("*.pdf"))
+
+    if not pdf_paths:
+        st.error(f"❌ {target_subject}ディレクトリにPDFが見つかりません。")
+        return
+
+    progress_bar = st.progress(0, text="インデックス構築を開始...")
+
+    try:
+        from src.pdf_reader import extract_text_from_pdf
+        from src.text_chunker import chunk_text
+        from src.embedder import (
+            generate_cache_key,
+            generate_embeddings,
+            save_cache,
+        )
+
+        cache_key = generate_cache_key(pdf_paths)
+        cache_dir = Path("vector_stores") / target_subject
+
+        # 1. PDF読み込み
+        progress_bar.progress(0.1, text="1/3: PDFからテキストを抽出中...")
+        all_pages: list[dict] = []
+        skipped: list[str] = []
+        for pdf_path in pdf_paths:
+            try:
+                pages = extract_text_from_pdf(pdf_path)
+                if pages:
+                    for page in pages:
+                        page["source_file"] = pdf_path
+                    all_pages.extend(pages)
+                else:
+                    skipped.append(Path(pdf_path).name)
+            except Exception as e:
+                skipped.append(f"{Path(pdf_path).name} ({e})")
+
+        if not all_pages:
+            st.error("❌ すべてのPDFからテキストを抽出できませんでした。")
+            return
+
+        # 2. チャンク分割
+        progress_bar.progress(0.4, text="2/3: テキストをチャンクに分割中...")
+        chunks = chunk_text(all_pages)
+
+        if not chunks:
+            st.error(f"❌ テキストは抽出されましたが、チャンク分割結果が0件です（抽出ページ数: {len(all_pages)}）")
+            return
+
+        # 3. Embedding生成
+        progress_bar.progress(0.6, text="3/3: Embedding生成中（API通信）...")
+        texts = [c["text"] for c in chunks]
+        if not texts:
+            st.error("❌ Embedding対象のテキストが空です。")
+            return
+        embeddings = generate_embeddings(texts)
+
+        # キャッシュ保存
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        progress_bar.progress(0.9, text="キャッシュを保存中...")
+        save_cache(embeddings, chunks, cache_key, cache_dir)
+
+        progress_bar.progress(1.0, text="完了！")
+
+        st.success(
+            f"✅ インデックス構築完了！\n\n"
+            f"- PDF: {len(pdf_paths)} 件\n"
+            f"- チャンク: {len(chunks)} 個\n"
+            f"- ベクトル次元: {embeddings.shape[1]}"
+        )
+
+        if skipped:
+            st.warning(f"⚠️ スキップされたファイル: {', '.join(skipped)}")
+
+        # RAGCoreのキャッシュをリセット（次回読み込み時に再構築させる）
+        st.session_state.pop("rag_core", None)
+        st.session_state.pop("ai_tutor", None)
+        st.session_state.pop("pipeline_key", None)
+
+    except Exception as e:
+        st.error(f"❌ インデックス構築に失敗しました: {e}")
+
+
 def render_library() -> None:
     """知識の書庫（PDF・インデックス管理画面）を描画する。"""
     st.title("📚 知識の書庫 (Library)")
@@ -88,8 +173,17 @@ def render_library() -> None:
 
                 if cache["exists"]:
                     st.success(f"✅ インデックス構築済み（{cache['chunk_count']} チャンク）")
+                    if st.button("🔄 インデックスを再構築", key=f"rebuild_{subject}", width="stretch"):
+                        _build_index_pipeline(subject)
+                        st.rerun()
                 else:
-                    st.warning("⚠️ インデックス未構築")
+                    col_warn, col_btn = st.columns([2, 1])
+                    with col_warn:
+                        st.warning("⚠️ インデックス未構築")
+                    with col_btn:
+                        if st.button("🔄 インデックス構築", key=f"build_{subject}", type="primary", width="stretch"):
+                            _build_index_pipeline(subject)
+                            st.rerun()
 
         col1, col2 = st.columns(2)
         with col1:
@@ -130,7 +224,7 @@ def render_library() -> None:
     if uploaded_files and target_subject:
         st.info(f"📁 アップロード先: `data/{target_subject}/`")
 
-        if st.button("🔄 インデックスを構築（ベクトル化）", type="primary", use_container_width=True):
+        if st.button("🔄 インデックスを構築（ベクトル化）", type="primary", width="stretch"):
             target_dir = Path(DATA_DIR) / target_subject
             target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -144,75 +238,9 @@ def render_library() -> None:
                     text=f"PDF保存中... ({i + 1}/{len(uploaded_files)})",
                 )
 
-            # インデックス構築パイプライン
-            progress_bar.progress(0, text="インデックス構築を開始...")
-
-            try:
-                from src.pdf_reader import extract_text_from_pdf
-                from src.text_chunker import chunk_text
-                from src.embedder import (
-                    generate_cache_key,
-                    generate_embeddings,
-                    save_cache,
-                )
-
-                # 対象PDFを全て取得
-                pdf_paths = sorted(str(p) for p in target_dir.glob("*.pdf"))
-                cache_key = generate_cache_key(pdf_paths)
-                cache_dir = Path("vector_stores") / target_subject
-
-                # 1. PDF読み込み
-                progress_bar.progress(0.1, text="1/3: PDFからテキストを抽出中...")
-                all_pages: list[dict] = []
-                skipped: list[str] = []
-                for pdf_path in pdf_paths:
-                    try:
-                        pages = extract_text_from_pdf(pdf_path)
-                        if pages:
-                            for page in pages:
-                                page["source_file"] = pdf_path
-                            all_pages.extend(pages)
-                        else:
-                            skipped.append(Path(pdf_path).name)
-                    except Exception as e:
-                        skipped.append(f"{Path(pdf_path).name} ({e})")
-
-                if not all_pages:
-                    st.error("❌ すべてのPDFからテキストを抽出できませんでした。")
-                    return
-
-                # 2. チャンク分割
-                progress_bar.progress(0.4, text="2/3: テキストをチャンクに分割中...")
-                chunks = chunk_text(all_pages)
-
-                # 3. Embedding生成
-                progress_bar.progress(0.6, text="3/3: Embedding生成中（API通信）...")
-                texts = [c["text"] for c in chunks]
-                embeddings = generate_embeddings(texts)
-
-                # キャッシュ保存
-                progress_bar.progress(0.9, text="キャッシュを保存中...")
-                save_cache(embeddings, chunks, cache_key, cache_dir)
-
-                progress_bar.progress(1.0, text="完了！")
-
-                st.success(
-                    f"✅ インデックス構築完了！\n\n"
-                    f"- PDF: {len(pdf_paths)} 件\n"
-                    f"- チャンク: {len(chunks)} 個\n"
-                    f"- ベクトル次元: {embeddings.shape[1]}"
-                )
-
-                if skipped:
-                    st.warning(f"⚠️ スキップされたファイル: {', '.join(skipped)}")
-
-                # RAGCoreのキャッシュをリセット（次回読み込み時に再構築させる）
-                st.session_state.pop("rag_core", None)
-                st.session_state.pop("ai_tutor", None)
-                st.session_state.pop("pipeline_key", None)
-
-            except Exception as e:
-                st.error(f"❌ インデックス構築に失敗しました: {e}")
+            # 共通のインデックス構築パイプラインを呼び出し
+            _build_index_pipeline(target_subject)
+            st.rerun()
 
     elif uploaded_files and not target_subject:
         st.warning("⚠️ 科目名を入力してください。")
@@ -239,7 +267,7 @@ def render_library() -> None:
                 key="confirm_delete_check",
             )
 
-            if st.button("🗑️ インデックスを削除", disabled=not confirm_delete, use_container_width=True):
+            if st.button("🗑️ インデックスを削除", disabled=not confirm_delete, width="stretch"):
                 if delete_target == "--- 選択してください ---":
                     st.error("削除対象を選択してください。")
                 elif delete_target == "🔥 全科目のインデックスを削除":

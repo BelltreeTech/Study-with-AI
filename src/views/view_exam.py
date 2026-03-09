@@ -109,7 +109,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
     st.session_state["exam_difficulty"] = selected_difficulty
 
     # 難易度に応じた合格ラインを表示
-    pass_line: int = PASS_SCORES.get(selected_difficulty, 90)
+    pass_line: int = PASS_SCORES.get(selected_difficulty, PASS_SCORES["Normal"])
     st.info(
         f"**科目:** {selected_subject}　|　"
         f"**難易度:** {difficulty_descriptions[selected_difficulty]}　|　"
@@ -148,7 +148,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
             tags = [f"{kw} (ミス: {data['error_count']}回)" for kw, data in current_weaknesses.items()]
             st.markdown(" ".join([f"`{tag}`" for tag in tags]))
 
-            if st.button("🎲 弱点からランダム出題スタート", type="primary", use_container_width=True):
+            if st.button("🎲 弱点からランダム出題スタート", type="primary", width="stretch"):
                 import random
                 # 苦手度（エラーカウント）を重みとしてランダム選択
                 choices = list(current_weaknesses.keys())
@@ -162,7 +162,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
             placeholder="勾配消失問題",
             key="quiz_topic_input",
         )
-        if st.button("🎲 出題スタート", type="primary", use_container_width=True):
+        if st.button("🎲 出題スタート", type="primary", width="stretch"):
             target_topic = topic_input.strip()
             st.session_state["exam_challenge_weakness_keyword"] = ""
 
@@ -208,7 +208,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
             label_visibility="collapsed",
         )
 
-        if st.button("📝 採点する", type="primary", use_container_width=True):
+        if st.button("📝 採点する", type="primary", width="stretch"):
             if not user_answer.strip():
                 st.warning("回答を入力してください。")
             else:
@@ -235,7 +235,7 @@ def render_exam_mode(ai_tutor: AITutor) -> None:
                 # 弱点克服モードでの出題だった場合、合格なら克服処理
                 challenge_kw = st.session_state.get("exam_challenge_weakness_keyword", "")
                 if challenge_kw:
-                    pass_line_for_clear = PASS_SCORES.get(selected_difficulty, 90)
+                    pass_line_for_clear = PASS_SCORES.get(selected_difficulty, PASS_SCORES["Normal"])
                     if grading["score"] >= pass_line_for_clear:
                         clear_status = process_weakness_clear(selected_subject, challenge_kw)
                         st.session_state["exam_weakness_cleared"] = challenge_kw

@@ -185,12 +185,32 @@ def save_cache(
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    np.save(cache_dir / f"embeddings_{cache_key}.npy", embeddings)
+    npy_path = cache_dir / f"embeddings_{cache_key}.npy"
+    json_path = cache_dir / f"chunks_{cache_key}.json"
 
-    with open(cache_dir / f"chunks_{cache_key}.json", "w", encoding="utf-8") as f:
-        json.dump(chunks, f, ensure_ascii=False, indent=2)
+    npy_tmp = str(npy_path) + ".tmp"
+    json_tmp = str(json_path) + ".tmp"
 
-    print(f"  キャッシュ保存完了: {cache_dir}/ (キー: {cache_key})")
+    try:
+        # 一時ファイルへ書き込み
+        with open(npy_tmp, "wb") as f:
+            np.save(f, embeddings)
+
+        with open(json_tmp, "w", encoding="utf-8") as f:
+            json.dump(chunks, f, ensure_ascii=False, indent=2)
+
+        # アトミックにリネーム（OSレベルで瞬時に行われる）
+        os.replace(npy_tmp, npy_path)
+        os.replace(json_tmp, json_path)
+
+        print(f"  キャッシュ保存完了: {cache_dir}/ (キー: {cache_key})")
+    except Exception as e:
+        # 失敗時は一時ファイルを削除して例外を再送出
+        if os.path.exists(npy_tmp):
+            os.remove(npy_tmp)
+        if os.path.exists(json_tmp):
+            os.remove(json_tmp)
+        raise RuntimeError(f"キャッシュ保存中にエラーが発生しました: {e}")
 
 
 def load_cache(

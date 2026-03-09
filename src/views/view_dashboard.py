@@ -150,7 +150,7 @@ def render_dashboard() -> None:
         coloraxis_showscale=False,
         hovermode="closest"
     )
-    st.plotly_chart(fig_heat, use_container_width=True)
+    st.plotly_chart(fig_heat, width="stretch")
     st.divider()
 
     # --- ボトムセクション: レーダーチャート ---
@@ -165,6 +165,6 @@ def render_dashboard() -> None:
         df = pd.DataFrame(radar_data)
         fig = px.line_polar(df, r="EXP", theta="科目", line_close=True, markers=True)
         fig.update_traces(fill="toself")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("科目を学習してEXPを獲得すると、ここにレーダーチャートが表示されます。")

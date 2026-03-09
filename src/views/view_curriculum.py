@@ -26,8 +26,8 @@ from src.config import PASS_SCORE_NORMAL
 # 修了試験の難易度とマッピング
 EXAM_DIFFICULTIES: dict[str, dict] = {
     "🟢 学部級（基礎確認）": {"line": 70, "api": "Easy"},
-    "🟡 修士級（応用・分析）": {"line": 90, "api": "Normal"},
-    "🔴 博士級（批判的考察）": {"line": 95, "api": "Hard"},
+    "🟡 修士級（応用・分析）": {"line": 80, "api": "Normal"},
+    "🔴 博士級（批判的考察）": {"line": 90, "api": "Hard"},
 }
 
 # Mermaidコードブロック検出用の正規表現
@@ -124,14 +124,14 @@ def _render_dashboard(ai_tutor: AITutor) -> None:
                     if st.button(
                         "▶️ 再開する",
                         key=f"resume_{course_name}",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         _activate_course(course_name)
                         st.rerun()
                     if st.button(
                         "🗑️ 削除",
                         key=f"delete_{course_name}",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         delete_course(course_name)
                         st.rerun()
@@ -168,7 +168,7 @@ def _render_dashboard(ai_tutor: AITutor) -> None:
     }
     selected_chapter_length = volume_map[chapter_volume_str]
 
-    if st.button("📋 カリキュラムを作成", type="primary", use_container_width=True):
+    if st.button("📋 カリキュラムを作成", type="primary", width="stretch"):
         topic_stripped: str = new_topic.strip()
         if not topic_stripped:
             st.warning("学習テーマを入力してください。")
@@ -261,7 +261,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
         data="\n".join(md_lines),
         file_name=f"{course_name}_Polymath_Note.md",
         mime="text/markdown",
-        use_container_width=True,
+        width="stretch",
     )
 
     # ---- サイドバー: 進捗状況表示 + 章ナビゲーション ----
@@ -351,7 +351,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
             if st.button(
                 f"📖 第{ch_num}章の学習を始める（レクチャー開始）",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
             ):
                 current_style = st.session_state.get("tutor_style", "🧑🏫 標準モード")
                 require_math = st.session_state.get("require_math", False)
@@ -387,7 +387,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
             # --- 講義の再生成ボタン (現在の章のみ表示) ---
             if is_viewing_current and not is_viewing_completed:
                 st.write("")  # スペーサー
-                if st.button("🔄 この講義を再生成する（表記バグ・内容修正用）", use_container_width=True):
+                if st.button("🔄 この講義を再生成する（表記バグ・内容修正用）", width="stretch"):
                     current_style = st.session_state.get("tutor_style", "🧑🏫 標準モード")
                     require_math = st.session_state.get("require_math", False)
                     with st.spinner(f"📝 {current_style}で講義ノートを再構築中..."):
@@ -494,7 +494,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                         if st.button(
                             f"📝 第{ch_num}章の修了試験を受ける",
                             type="primary",
-                            use_container_width=True,
+                            width="stretch",
                         ):
                             api_diff = EXAM_DIFFICULTIES[selected_diff]["api"]
                             with st.spinner("🎓 講義内容に基づいて修了試験を出題中..."):
@@ -508,7 +508,10 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                             st.session_state["exam_grading_result"] = None
                             st.rerun()
                 else:
-                    st.subheader("📝 修了試験（100点満点 / 合格ライン90点）")
+                    current_diff = st.session_state.get("curriculum_exam_difficulty", "🟡 修士級（応用・分析）")
+                    pass_line = EXAM_DIFFICULTIES[current_diff]["line"]
+                    
+                    st.subheader(f"📝 修了試験（100点満点 / 合格ライン{pass_line}点）")
                     st.markdown(exam_question)
 
                     if exam_grading is None:
@@ -519,7 +522,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                             key="exam_answer_input",
                             label_visibility="collapsed",
                         )
-                        if st.button("📝 回答を提出する", type="primary", use_container_width=True):
+                        if st.button("📝 回答を提出する", type="primary", width="stretch"):
                             if not exam_answer.strip():
                                 st.warning("回答を入力してください。")
                             else:
@@ -564,7 +567,7 @@ def _render_course_view(ai_tutor: AITutor, course_name: str) -> None:
                             if st.button(
                                 "🎉 合格！次の章へ進む",
                                 type="primary",
-                                use_container_width=True,
+                                width="stretch",
                             ):
                                 curriculum[current_idx]["status"] = "completed"
                                 if current_idx + 1 < len(curriculum):

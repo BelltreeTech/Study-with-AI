@@ -10,6 +10,10 @@ data/ ディレクトリ内のPDFを選択し、チャットインターフェ�
 
 import streamlit as st
 from pathlib import Path
+import os
+import sys
+import signal
+import datetime
 
 from src.core.rag_core import RAGCore
 from src.core.ai_tutor import AITutor
@@ -148,14 +152,127 @@ def _render_lobby() -> None:
                         "📚 学習を開始する",
                         key=f"select_{subject_path}",
                         type="primary",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         st.session_state["selected_subject"] = subject_path
                         st.rerun()
 
 
+def graceful_shutdown(*args) -> None:
+    """
+    安全な終了処理（Graceful Shutdown）を実行する。
+
+    SIGINT (Ctrl+C) またはUIの終了ボタンから呼び出される。
+    インデックス構築中などに生成された不完全な .tmp ファイルを
+    削除し、データ破損を防ぐ。
+    """
+    print("\n[システム] 安全な終了処理（Graceful Shutdown）を開始します...")
+    
+    # vector_stores 配下の .tmp ファイルを検索して削除
+    vs_dir = Path("vector_stores")
+    if vs_dir.exists():
+        tmp_files = list(vs_dir.rglob("*.tmp"))
+        for tmp_file in tmp_files:
+            try:
+                tmp_file.unlink()
+                print(f"  🗑️ 一時ファイルを削除: {tmp_file.name}")
+            except Exception as e:
+                print(f"  ⚠️ 一時ファイルの削除に失敗: {tmp_file.name} ({e})")
+                
+    print("[システム] シャットダウン完了。")
+    os._exit(0)
+
+
+@st.fragment(run_every=1)
+def render_pomodoro_timer() -> None:
+    """
+    集中トラッカー（25分タイマー）。
+    @st.fragment(run_every=1) を付与することで、
+    メインスレッドの操作をブロックせず、この領域だけが
+    独立して1秒ごとに自動再描画（ポーリング）される。
+    呼び出し元で `with st.sidebar:` コンテキストを使用すること。
+    """
+    st.divider()
+    st.markdown("### 🍅 集中トラッカー")
+
+    if "pomodoro_start_time" not in st.session_state:
+        st.session_state["pomodoro_start_time"] = None
+    if "pomodoro_completed_just_now" not in st.session_state:
+        st.session_state["pomodoro_completed_just_now"] = False
+
+    # 1. 自動完了時のBalloons発火（1回だけフラグを消費して風船を飛ばす）
+    if st.session_state["pomodoro_completed_just_now"]:
+        st.success("🎉 25分達成！ 20 EXP獲得！お疲れ様でした！")
+        st.balloons()
+        st.session_state["pomodoro_completed_just_now"] = False  # フラグのリセット
+
+    if st.session_state["pomodoro_start_time"] is None:
+        # ----- タイマー停止中 -----
+        if st.button("▶️ 25分集中スタート", width="stretch", key="pomo_start"):
+            st.session_state["pomodoro_start_time"] = datetime.datetime.now()
+            st.rerun()
+
+    else:
+        # ----- タイマー稼働中 -----
+        start_time = st.session_state["pomodoro_start_time"]
+        now = datetime.datetime.now()
+        elapsed_secs = (now - start_time).total_seconds()
+        elapsed_mins = elapsed_secs / 60.0
+
+        # 分:秒 フォーマットの計算
+        m = int(elapsed_secs // 60)
+        s = int(elapsed_secs % 60)
+        
+        # UI更新（毎秒ここだけが書き換わる）
+        st.info(f"🔥 集中モード実行中\n\n経過: **{m:02d}:{s:02d}** / 25:00")
+        
+        # 自動検知: 25分（1500秒）に達したか
+        target_mins = 25.0
+        
+        if elapsed_mins >= target_mins:
+            # ==== 完了ロジック ====
+            from src.progress import add_exp, add_pomodoro_session
+            add_pomodoro_session(25)
+            # Noneを指定し、科目データを汚染しないようにする
+            add_exp(None, 20)
+            
+            st.session_state["pomodoro_start_time"] = None
+            st.session_state["pomodoro_completed_just_now"] = True
+            st.rerun()
+            return  # rerun()によりこの関数は終了する
+        
+        # 手動操作ボタン
+        if st.button("⏹️ 手動で完了", type="primary", width="stretch", key="pomo_manual"):
+            if elapsed_mins >= target_mins:
+                from src.progress import add_exp, add_pomodoro_session
+                add_pomodoro_session(25)
+                # target_mins 達成時は None を渡して全体EXP等のみに加算（ダミー科目を生成しない）
+                add_exp(None, 20)
+                st.session_state["pomodoro_start_time"] = None
+                st.session_state["pomodoro_completed_just_now"] = True
+            else:
+                st.session_state["pomodoro_start_time"] = None
+                st.toast(f"⚠️ 目標時間未達（現在: {m}分）。今回は中断扱いとなります。", icon="⚠️")
+            st.rerun()
+
+        if st.button("✖️ 中断する (記録なし)", width="stretch", key="pomo_cancel"):
+            st.session_state["pomodoro_start_time"] = None
+            st.toast("タイマーを中断しました。", icon="🛑")
+            st.rerun()
+            
+    st.divider()
+
+
 def main() -> None:
     """Streamlitアプリのメインエントリーポイント。"""
+    import threading
+    # ターミナル側での Ctrl+C 対応 (メインスレッドのみ登録可能)
+    if threading.current_thread() == threading.main_thread():
+        try:
+            signal.signal(signal.SIGINT, graceful_shutdown)
+        except ValueError:
+            pass # すでに別スレッド等で実行されている場合は無視
+
     # ページ設定
     st.set_page_config(
         page_title="まりによるRAG System - PDF質問応答",
@@ -165,6 +282,30 @@ def main() -> None:
 
     # セッションステートの一括初期化
     init_session_state()
+
+    # ================================================================
+    # 右上固定配置の「安全に終了」ボタン
+    # ================================================================
+    # StreamlitのCSSハックを利用して画面右上に固定表示する
+    st.markdown(
+        """
+        <style>
+        .fixed-shutdown-btn {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            z-index: 9999;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    with st.container():
+        col1, col2, col3 = st.columns([8, 1, 1])
+        with col3:
+            if st.button("🔌 安全に終了", type="primary", width="stretch", key="shutdown_btn"):
+                st.info("データを保存し、システムを安全に終了しています...")
+                graceful_shutdown()
 
     selected_subject: str = st.session_state["selected_subject"]
 
@@ -181,7 +322,7 @@ def main() -> None:
         else:
             display_label = f"**{selected_subject}**"
         st.markdown(f"### 📚 科目: {display_label}")
-        if st.button("🏠 科目を選び直す（ロビーへ）", use_container_width=True):
+        if st.button("🏠 科目を選び直す（ロビーへ）", width="stretch"):
             # セッションをクリアしてロビーに戻る
             st.session_state["selected_subject"] = ""
             st.session_state.pop("rag_core", None)
@@ -241,40 +382,9 @@ def main() -> None:
             label_visibility="collapsed",
         )
 
-    # --- ポモドーロ・タイマー (サイドバー常設) ---
-    st.sidebar.divider()
-    st.sidebar.markdown("### 🍅 集中トラッカー")
-
-    import datetime
-    if "pomodoro_start_time" not in st.session_state:
-        st.session_state["pomodoro_start_time"] = None
-
-    if st.session_state["pomodoro_start_time"] is None:
-        if st.sidebar.button("▶️ 25分集中スタート", use_container_width=True):
-            st.session_state["pomodoro_start_time"] = datetime.datetime.now()
-            st.rerun()
-    else:
-        start_time = st.session_state["pomodoro_start_time"]
-        elapsed_mins = (datetime.datetime.now() - start_time).total_seconds() / 60.0
-
-        st.sidebar.info(f"🔥 集中モード実行中\n開始: {start_time.strftime('%H:%M')}")
-
-        if st.sidebar.button("⏹️ セッション完了", type="primary", use_container_width=True):
-            if elapsed_mins >= 25.0:
-                from src.progress import add_exp, add_pomodoro_session
-                add_pomodoro_session(25)
-                # 科目名を「集中学習」としてEXPを追加
-                add_exp("集中学習", 20)
-                st.session_state["pomodoro_start_time"] = None
-                st.sidebar.success("🎉 25分達成！ 20 EXP獲得！")
-                st.balloons()
-            else:
-                st.sidebar.warning(f"⚠️ まだ {int(elapsed_mins)} 分です。25分以上の経過が必要です。")
-
-        if st.sidebar.button("✖️ 中断する (記録なし)", use_container_width=True):
-            st.session_state["pomodoro_start_time"] = None
-            st.rerun()
-    st.sidebar.divider()
+    # --- ポモドーロ・タイマー (サイドバー常設/フラグメント化) ---
+    with st.sidebar:
+        render_pomodoro_timer()
 
     rag_core, ai_tutor = _build_components(selected_subject)
 
