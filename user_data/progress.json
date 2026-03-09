@@ -963,16 +963,16 @@
   },
   "last_active_course": "確率統計（入門）",
   "user_profile": {
-    "total_exp": 450,
-    "daily_exp": 350,
+    "total_exp": 0,
+    "daily_exp": 0,
     "last_active_date": "2026-03-09",
     "current_streak": 2,
     "last_streak_date": "2026-03-09",
     "exp_history": {
-      "2026-03-08": 50,
-      "2026-03-09": 350
+      "2026-03-08": 0,
+      "2026-03-09": 0
     },
-    "total_pomodoros": 15,
-    "focused_minutes": 375
+    "total_pomodoros": 0,
+    "focused_minutes": 0
   }
 }
