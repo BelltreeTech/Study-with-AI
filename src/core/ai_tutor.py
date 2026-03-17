@@ -751,3 +751,48 @@ class AITutor:
             "lecture_text": lecture_text,
             "source_chunks": source_chunks,
         }
+
+    # ================================================================
+    # 傾向分析レポート生成 (RAG Trend Analysis)
+    # ================================================================
+
+    def generate_trend_report(self, sampled_context: str) -> str:
+        """
+        PDFデータ全体（過去問やシラバスなど）の出題傾向を分析し、レポート形式で出力する。
+
+        RAGCoreからサンプリング抽出されたチャンク群（sampled_context）を受け取り、
+        全体を俯瞰した分析を行う。
+
+        Args:
+            sampled_context: サンプリング・結合されたコンテキスト文字列
+
+        Returns:
+            Markdown形式の分析レポート文字列
+        """
+        system_prompt: str = (
+            "あなたは現役の大学教授であり、試験の出題意図を解析・指導する専門家です。\n"
+            "提供された複数の資料（過去問、シラバス、教科書の抜粋等）のデータから全体を俯瞰し、"
+            "この科目における出題傾向を分析してください。\n\n"
+            "以下の3点を必ず含んだMarkdown形式のレポートを出力してください：\n"
+            "1. **頻出トピックと重要キーワード**: どの単元や概念が繰り返し問われているか。\n"
+            "2. **想定される出題形式**: どのような形式（計算、論述、正誤判定など）の設問が多いか。\n"
+            "3. **対策の優先順位**: 学習者が最も優先して着手すべき分野とその理由。\n\n"
+            "出力は直接Markdown形式で開始し、挨拶や前置きは不要です。分析対象は提供されたコンテキストのみとします。"
+        )
+
+        user_prompt: str = f"【分析対象データ】\n\n{sampled_context}"
+
+        try:
+            response = self._client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.4,  # 分析タスクのため論理的一貫性を重視
+                max_tokens=MAX_TOKENS_LECTURE,
+            )
+            return response.choices[0].message.content or "レポートを生成できませんでした。"
+        except Exception as e:
+            print(f"[AITutor] 傾向レポート生成エラー: {e}")
+            return f"傾向レポートの生成中にエラーが発生しました。\n詳細: {e}"

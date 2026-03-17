@@ -398,7 +398,7 @@ def main() -> None:
         from src.views.view_library import render_library
         render_library()
     elif app_mode == "🔍 知識検索 (RAG)":
-        render_rag_mode(rag_core, debug_mode, top_k, style, length)
+        render_rag_mode(rag_core, ai_tutor, debug_mode, top_k, style, length)
     elif app_mode == "🎓 模擬試験 (Feynman Drill)":
         render_exam_mode(ai_tutor)
     else:

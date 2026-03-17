@@ -695,3 +695,48 @@ class RAGCore:
             "sources": sources,
             "debug_info": debug_info,
         }
+
+    def get_sample_chunks_for_analysis(self, max_chars: int = 15000) -> str:
+        """
+        出題傾向分析等のため、インデックス全体のチャンクからテキストをランダム抽出・結合する。
+
+        LLMのトークン上限（Context Window）を考慮し、指定した文字数(max_chars)を
+        超えない範囲でチャンクを選択する。15000文字はおよそ1.5万〜2万トークン弱に相当し、
+        GPT-4o等の上限内に安全に収まる。
+
+        Args:
+            max_chars: 抽出するテキストの最大推定文字数
+
+        Returns:
+            結合されたテキスト文字列（マークダウン区切り）
+        """
+        import random
+
+        if not self._chunks:
+            return ""
+
+        # ランダムサンプリング用にチャンクのインデックスリストをシャッフル
+        indices = list(range(len(self._chunks)))
+        random.shuffle(indices)
+
+        sampled_parts = []
+        current_chars = 0
+
+        for idx in indices:
+            chunk = self._chunks[idx]
+            text = chunk.get("text", "")
+            source = chunk.get("source_file", "不明")
+            page = chunk.get("page_number", "?")
+
+            chunk_len = len(text)
+            if current_chars + chunk_len > max_chars:
+                break
+
+            part_str = f"[{source} - Page {page}]\n{text}"
+            sampled_parts.append(part_str)
+            current_chars += chunk_len
+
+        # 元の順序に近いほうが文脈がわかりやすいためソート
+        # ※実際には元のインデックスでソートするほうがより自然（ドキュメント順）
+        # ですが、ここでは抽出された順序のままで構いません。
+        return "\n\n---\n\n".join(sampled_parts)

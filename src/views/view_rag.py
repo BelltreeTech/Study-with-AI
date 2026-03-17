@@ -11,8 +11,11 @@ import uuid
 from src.core.rag_core import RAGCore
 
 
+from src.core.ai_tutor import AITutor
+
 def render_rag_mode(
     rag_core: RAGCore,
+    ai_tutor: AITutor,
     debug_mode: bool,
     top_k: int,
     style: str,
@@ -22,6 +25,31 @@ def render_rag_mode(
     # ---- メイン画面：チャットUI ----
     st.title("📖 まりによるRAG System")
     st.caption("NumPyベースのベクトル検索（スクラッチ実装）によるPDF質問応答")
+
+    # ---- 分析機能セクション ----
+    if st.button("📊 過去問・傾向分析レポートを生成", type="secondary", use_container_width=True):
+        with st.spinner("📚 データ群を俯瞰・分析中... (数十秒かかる場合があります)"):
+            import time
+            start_time = time.time()
+            sampled_text = rag_core.get_sample_chunks_for_analysis()
+            
+            if not sampled_text:
+                st.warning("インデックスが構築されていないか、テキストが存在しません。")
+            else:
+                report = ai_tutor.generate_trend_report(sampled_text)
+                st.session_state["trend_report"] = report
+                elapsed = time.time() - start_time
+                st.success(f"レポート生成完了！ ({elapsed:.1f}秒)")
+
+    # 生成されたレポートがあれば上部に常時表示（Expander形式）
+    if "trend_report" in st.session_state and st.session_state["trend_report"]:
+        with st.expander("📝 出題傾向・分析レポート", expanded=True):
+            st.markdown(st.session_state["trend_report"])
+            if st.button("✖ レポートを閉じる", key="btn_close_trend"):
+                st.session_state.pop("trend_report", None)
+                st.rerun()
+                
+    st.divider()
 
     # チャット履歴はstate_managerで初期化済み
 

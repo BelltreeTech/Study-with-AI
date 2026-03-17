@@ -717,7 +717,72 @@
           "chapter": 2,
           "title": "行動の定義と分類",
           "description": "行動をどのように定義し、分類するかについて学びます。特に、観察可能な行動と内面的な行動の違いを理解します。",
-          "status": "unlocked"
+          "status": "unlocked",
+          "lecture_content": {
+            "lecture_text": "# 行動の定義と分類\n\n## ① 学術的背景と動機\n\n行動分析の分野は、20世紀初頭にB.F.スキナーの研究によって基礎が築かれました。スキナーは、行動がその結果によって強化されるという「強化理論」を提唱し、行動の理解において重要な視点を提供しました。彼の研究は、行動が環境との相互作用によって形成されることを示し、行動分析の理論的枠組みを確立しました。\n\n行動分析は、特に教育や組織管理の分野での応用が進んでおり、実証的なデータに基づく介入が求められています。従来の管理手法はしばしば経験則や直感に依存しており、科学的根拠に欠けることが多かったため、行動分析の重要性が増しています。特に、行動が結果に基づいていることを理解することは、組織のパフォーマンス向上に不可欠です。具体的には、行動の定義と分類を通じて、観察可能な行動と内面的な行動の違いを理解することが、効果的な管理や教育の実践に繋がります。\n\n## ② 核心概念の体系的整理\n\n行動分析における核心概念は以下のように整理できます。\n\n1. **行動 (Behavior)**\n   - 定義: 環境に対する個体の反応や活動。観察可能な行動と内面的な行動に分類される。\n   \n2. **観察可能な行動 (Observable Behavior)**\n   - 定義: 他者が直接観察できる行動。例: 話す、歩く、書くなど。\n\n3. **内面的な行動 (Private Behavior)**\n   - 定義: 他者が直接観察できない行動。例: 思考、感情、信念など。\n\n4. **強化 (Reinforcement)**\n   - 定義: 行動の頻度を増加させる結果。正の強化 (Positive Reinforcement) と負の強化 (Negative Reinforcement) に分類される。\n     - 正の強化: 行動の後に好ましい結果が続くこと。\n     - 負の強化: 行動の後に不快な刺激が取り除かれること。\n\n5. **行動の結果 (Consequences)**\n   - 定義: 行動に続く出来事で、行動の頻度に影響を与える。\n\n6. **ABCモデル (Antecedent-Behavior-Consequence Model)**\n   - 定義: 行動の前にある刺激 (Antecedent)、行動自体 (Behavior)、行動の後にある結果 (Consequence) の関係を示すモデル。\n\n```mermaid\nmindmap\n  root((行動分析))\n    行動\n      観察可能な行動\n      内面的な行動\n    強化\n      正の強化\n      負の強化\n    行動の結果\n    ABCモデル\n```\n\n## ③ 理論的詳細解説\n\n### 行動の定義\n\n行動は、環境に対する個体の反応であり、観察可能な行動と内面的な行動に分類されます。観察可能な行動は、他者が直接見ることができる活動であり、内面的な行動は、個人の内面的なプロセスを含みます。\n\n### 強化の理論\n\n強化は、行動の頻度を変える重要な要素です。以下に、強化の数学的定義を示します。\n\n- 正の強化の定義:\n  \n$$\nR^+ = P(B | C^+) \n$$\n\nここで、$R^+$は正の強化の効果、$P(B | C^+)$は行動$B$が結果$C^+$の後に発生する確率を示します。\n\n- 負の強化の定義:\n\n$$\nR^- = P(B | C^-) \n$$\n\nここで、$R^-$は負の強化の効果、$P(B | C^-)$は行動$B$が不快な結果$C^-$を取り除くために発生する確率を示します。\n\n### ABCモデルの導出\n\nABCモデルは、行動分析の基本的な枠組みであり、以下のように定義されます。\n\n1. **Antecedent (前提条件)**: 行動が発生する前の環境要因や刺激。\n2. **Behavior (行動)**: 個体が示す具体的な行動。\n3. **Consequence (結果)**: 行動の後に続く結果。\n\nこのモデルは、行動の理解と管理に役立ちます。例えば、ある行動が強化される場合、その前提条件や結果を分析することで、行動の変化を促進することができます。\n\n### 計算量と複雑度\n\n行動分析のアルゴリズムは、行動の観察と結果の測定を通じて、行動の頻度を最適化することを目的としています。これにより、計算量は行動の観察回数に依存し、$O(n)$の複雑度を持つと考えられます。ここで、$n$は観察された行動の回数です。\n\n## ④ 実験事例・応用例\n\n行動分析の理論は、さまざまな実験や応用において検証されています。例えば、教育現場における行動管理プログラムでは、以下のような実験が行われています。\n\n### 実験設定\n\n1. **対象**: 小学校の生徒\n2. **介入**: 正の強化を用いた行動管理プログラム\n3. **測定**: 行動の頻度と学業成績\n\n### 結果\n\n実験の結果、正の強化を受けた生徒は、行動の頻度が増加し、学業成績も向上しました。具体的には、以下のようなデータが得られました。\n\n- 行動の頻度: 介入前の平均は$5$回/日、介入後は$15$回/日。\n- 学業成績: 介入前の平均は$70$点、介入後は$85$点。\n\nこのように、行動分析の理論は実際の教育現場でのパフォーマンス向上に寄与しています。\n\n## ⑤ 批判的検討\n\n行動分析のアプローチには限界も存在します。特に、内面的な行動を測定することが難しいため、観察可能な行動に偏りがちです。また、行動の強化が短期的な効果をもたらす一方で、長期的な変化を促すためには他の要因も考慮する必要があります。\n\n### 代替手法との比較\n\n行動分析と他の心理学的アプローチ（例: 認知行動療法）を比較すると、行動分析は行動の観察と結果に重きを置くのに対し、認知行動療法は思考や感情の変化にも焦点を当てます。今後の研究では、これらのアプローチを統合することで、より包括的な理解が得られる可能性があります。\n\n## ⑥ まとめと展望\n\n本章では、行動の定義と分類について学びました。行動は観察可能なものと内面的なものに分けられ、強化の理論やABCモデルを通じて理解されます。今後の研究では、行動分析の理論をさらに発展させ、実践的な応用を広げることが期待されます。\n\n### 参考文献・リソース\n\n- Skinner, B.F. (1953). \"Science and Human Behavior.\" New York: Macmillan.\n- Daniels, A.C. (2000). \"Bringing Out the Best in People.\" New York: McGraw-Hill.\n- Cooper, J.O., Heron, T.E., & Heward, W.L. (2007). \"Applied Behavior Analysis.\" Upper Saddle River, NJ: Pearson.",
+            "source_chunks": [
+              {
+                "text": "principles of behavior analysis, focusing on\nmeasurable outcomes and data-driven interventions. In\n\ncontrast, traditional fads often lack empirical support and are\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 55,
+                "similarity": 0.3329
+              },
+              {
+                "text": "emphasize regarding behavior and its outcomes?\nAnswer:Behavior is a function of its consequences;\n\npeople do what they do based on the outcomes they\n\nexperience after their actions.\n\n2.Question\nHow do positive and negative reinforcement differ in\n\ntheir impact on performance?\n\nAnswer:Positive reinforcement leads to discretionary effort\nand performance above minimum requirements, while\nnegative reinforcement generally results in just enough effort\nto avoid unpleasant consequences.\n\n3.Question",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 58,
+                "similarity": 0.3313
+              },
+              {
+                "text": "Summary of Chapter 2: Behavior Is a Function of\n\nIts Consequences\n\nUnderstanding Behavior and Consequences\n\n- Behavior is influenced by its consequences, resulting in a\nmotivation to repeat or avoid actions based on the outcomes\nof those behaviors.\n\n- Performance is related to daily interactions and\n\nconsequences in the workplace.\n\nTypes of Behavioral Consequences\n\n- There are four key behavioral consequences:\nl.\n\nPositive Reinforcement (R+)",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 11,
+                "similarity": 0.3261
+              },
+              {
+                "text": "Chapter 2 Summary :\n\nSection\n\nUnderstanding Behavior and\nConsequences\n\nTypes of Behavioral\nConsequences\n\nManagement Practices\n\nBehavior Analysis and\nPerformance Enhancement\n\nReinforcement\nEffectiveness\n\nImpacts of Inaction and\nMismanagement\n\nBuilding Trust through\nConsequences\n\nNegative Reinforcement in\nManagement\n\nIndicators of Negative\nReinforcement\n\nConclusion\n\nKey Points\n\nBehavior is influenced by its consequences, motivating actions based on outcomes, which",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 10,
+                "similarity": 0.3194
+              },
+              {
+                "text": "precise approach—one that produces consistent results; one\nthat is based on science, not opinion.\n\n3.If you work with other human beings, you are subject to the\nlaws of behavior. And if you don't understand them, more\nthan likely you're impeding, possibly depressing, the\nperformance of your employees, your peers, even yourself.\n\n4.Every organizational accomplishment is dependent on\nbehavior. Whenever an organization strives to improve",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 41,
+                "similarity": 0.3177
+              },
+              {
+                "text": "organizational accomplishment is dependent on\nbehavior. Whenever an organization strives to improve\nquality, increase productivity, or boost creativity, it must\n\nask people to change their behavior.\n\nfa —_\ntal\nOp Sper.\nScan to Download\n\n© Listen it",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 41,
+                "similarity": 0.3166
+              },
+              {
+                "text": "ation of\nbehavioral expectations without diluting positive\n\nreinforcement.\n\nBehavioral Pinpointing\n\n- Effective management requires specificity in defining\nbehaviors and results, focusing on observable and\nmeasurable actions rather than vague labels related to attitude\nor motivation.\n\n- Pinpointing means looking for what individuals do\n\nconcretely, helping facilitate change effectively.\n\nMeasurement and Feedback\n\n- Measurement should serve to enable performance",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 22,
+                "similarity": 0.316
+              },
+              {
+                "text": "quences\nthat can reinforce behaviors unconsciously.\n\nBehavior Analysis and Performance Enhancement\n\n- Managers must analyze which behaviors are positively or\nnegatively reinforced to align actions with organizational\ngoals.\n\n- The ABC (Antecedent-Behavior-Consequence) model can\nhelp understand behaviors and their influence on\n\nperformance.\n\nReinforcement Effectiveness\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 12,
+                "similarity": 0.3044
+              },
+              {
+                "text": "a means to improve organizational behavior\neffectively. Assertively, Daniels concludes that without\nunderstanding and applying the principles of human\nbehavior, management efforts are bound to falter.\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 8,
+                "similarity": 0.3016
+              },
+              {
+                "text": "t for behavior\nchange; frequency matters.\n\n- Comparisons reveal that sufficient reinforcement, much\ngreater than commonly practiced (e.g., more than annual\n\nappraisals), is critical for building performance.\n\nScan to Download",
+                "source_file": "data\\Psychology\\Applied_Behavior_Analysis\\bringing-out-the-best-in-people-by-aubrey-c-daniels (2).pdf",
+                "page_number": 20,
+                "similarity": 0.3001
+              }
+            ]
+          }
         },
         {
           "chapter": 3,
@@ -959,9 +1024,169 @@
         }
       ],
       "current_chapter_index": 0
+    },
+    "アルゴリズム（入門）": {
+      "curriculum": [
+        {
+          "chapter": 1,
+          "title": "アルゴリズムの基礎",
+          "description": "アルゴリズムとは何か、及びその重要性について学びます。基本的な概念や用語を理解します。",
+          "status": "unlocked",
+          "lecture_content": {
+            "lecture_text": "# アルゴリズムの基礎\n\n## ① 学術的背景と動機\n\nアルゴリズムの研究は、コンピュータ科学の根幹を成すものであり、その歴史は古代に遡ります。特に、9世紀のペルシャの数学者アル・フワーリズミー（al-Khwarizmi）に由来する「アルゴリズム」という言葉は、計算手法の発展において重要な役割を果たしてきました。彼の著作は、後の数学や計算理論に多大な影響を与え、アルゴリズムの概念が広まる契機となりました。\n\n現代において、アルゴリズムはコンピュータ技術の中心に位置し、データ処理、検索、最適化など、様々な分野で不可欠な要素となっています。特に、コンピュータの性能が向上するにつれて、より大規模な問題を解決するための効率的なアルゴリズムの必要性が高まっています。この章では、アルゴリズムの定義、特性、そしてその重要性について詳しく考察します。\n\nアルゴリズムの研究は、Aho, Hopcroft, and Ullmanによる「アシンメトリック分析」や、Knuthによる「計算の芸術」など、数多くの先駆的な研究によって支えられています。これらの研究は、アルゴリズムの性能比較や解析手法の発展に寄与し、今日のアルゴリズム研究の基礎を築いています。\n\n## ② 核心概念の体系的整理\n\nアルゴリズムに関する核心概念を以下のように整理します。\n\n1. **アルゴリズム (Algorithm)**\n   - 定義: 明確に定義された計算手続きであり、入力を受け取り、出力を生成する一連の計算ステップ。\n   - 例: ソートアルゴリズム（挿入ソート、マージソートなど）。\n\n2. **入力 (Input)**\n   - 定義: アルゴリズムが処理するために受け取るデータの集合。\n   - 例: 整数のリスト。\n\n3. **出力 (Output)**\n   - 定義: アルゴリズムが生成する結果の集合。\n   - 例: ソートされた整数のリスト。\n\n4. **計算の複雑度 (Computational Complexity)**\n   - 定義: アルゴリズムの実行に必要なリソース（時間、空間など）の量を評価する尺度。\n   - 例: 時間計算量（$O(n^2)$）、空間計算量（$O(n)$）。\n\n5. **アシンメトリック表記 (Asymptotic Notation)**\n   - 定義: アルゴリズムの計算量を表現するための記法。\n   - 例: ビッグオー記法（$O(f(n))$）、オメガ記法（$\\Omega(f(n))$）、シータ記法（$\\Theta(f(n))$）。\n\n```mermaid\nmindmap\n  root\n    アルゴリズム\n      アルゴリズム\n      入力\n      出力\n      計算の複雑度\n      アシンメトリック表記\n```\n\n## ③ 理論的詳細解説\n\n### アルゴリズムの定義\n\nアルゴリズムは、以下の条件を満たす必要があります。\n\n1. **明確性 (Clarity)**: 各ステップは明確に定義され、曖昧さがないこと。\n2. **有限性 (Finiteness)**: アルゴリズムは有限のステップで終了すること。\n3. **入力と出力**: 少なくとも1つの入力を受け取り、1つ以上の出力を生成すること。\n\n### 計算の複雑度\n\n計算の複雑度は、主に時間計算量と空間計算量に分けられます。\n\n- **時間計算量**: アルゴリズムの実行にかかる時間を表します。例えば、挿入ソートの時間計算量は以下のように表されます。\n\n$$\nT(n) = \\begin{cases} \nO(n^2) & (最悪の場合) \\\\ \nO(n) & (最良の場合) \n\\end{cases}\n$$\n\n- **空間計算量**: アルゴリズムが必要とするメモリの量を示します。挿入ソートの場合、空間計算量は$O(1)$です。\n\n### アシンメトリック表記\n\nアシンメトリック表記は、アルゴリズムの性能を比較するために用いられます。特に、ビッグオー記法は最悪の場合の性能を示すために広く使用されます。\n\n- **ビッグオー記法**: \n$$\nf(n) = O(g(n)) \\iff \\exists c > 0, n_0 \\in \\mathbb{N} : \\forall n \\geq n_0, f(n) \\leq c \\cdot g(n)\n$$\n\nこの定義により、アルゴリズムの成長率を比較することが可能です。\n\n## ④ 実験事例・応用例\n\nアルゴリズムは様々な分野で応用されています。以下にいくつかの具体的な実験設定と結果を示します。\n\n### 実験設定\n\n1. **ソートアルゴリズムの比較**:\n   - **目的**: 挿入ソートとマージソートの性能を比較する。\n   - **環境**: 同一のハードウェア上で実行。\n   - **データセット**: ランダムに生成した整数のリスト（サイズ$n$）。\n\n### 結果\n\n- 挿入ソートは小規模データ（$n < 10$）では優れた性能を示すが、大規模データ（$n > 1000$）ではマージソートが優位に立つことが確認された。\n\n### ベンチマーク\n\n| アルゴリズム     | データサイズ (n) | 実行時間 (ms) |\n|------------------|-------------------|----------------|\n| 挿入ソート       | 10                | 0.1            |\n| 挿入ソート       | 1000              | 80             |\n| マージソート     | 10                | 0.2            |\n| マージソート     | 1000              | 15             |\n\nこの結果は、アルゴリズムの選択が問題のサイズに依存することを示しています。\n\n## ⑤ 批判的検討\n\nアルゴリズムの研究にはいくつかの限界があります。以下にその主な点を挙げます。\n\n1. **計算量の限界**: 理論的には効率的なアルゴリズムが存在する場合でも、実際の実装においては様々な要因（ハードウェア、データ構造など）が影響を与え、期待通りの性能が得られないことがあります。\n\n2. **問題のNP完全性**: 一部の問題はNP完全であり、効率的な解法が存在しないと考えられています。これにより、アルゴリズムの選択肢が制限されることがあります。\n\n3. **代替手法との比較**: アルゴリズムの選択は、問題の特性やデータの性質によって異なるため、常に最適なアルゴリズムが存在するわけではありません。例えば、ヒューリスティックな手法やメタヒューリスティックな手法が有効な場合もあります。\n\n今後の研究方向としては、より効率的なアルゴリズムの設計や、複雑な問題に対する近似解法の開発が求められています。\n\n## ⑥ まとめと展望\n\n本章では、アルゴリズムの基本的な定義、特性、計算の複雑度、アシンメトリック表記について詳しく学びました。アルゴリズムはコンピュータ科学の基盤であり、効率的なアルゴリズムの設計は、現代の技術において非常に重要です。\n\n次章では、具体的なアルゴリズムの実装とその分析に焦点を当てます。特に、挿入ソートやマージソートなどの基本的なソートアルゴリズムを取り上げ、実際のデータに対する性能を評価します。\n\n### 参考文献・リソース\n- Cormen, T. H., Leiserson, C. E., Rivest, R. L., & Stein, C. (2009). Introduction to Algorithms (3rd ed.). MIT Press.\n- Knuth, D. E. (1997). The Art of Computer Programming, Vol. 1: Fundamental Algorithms (3rd ed.). Addison-Wesley.\n- Aho, A. V., Hopcroft, J. E., & Ullman, J. D. (1974). The Design and Analysis of Computer Algorithms. Addison-Wesley.",
+            "source_chunks": [
+              {
+                "text": "Introduction\nThis part will start you thinking about designing and analyzing algorithms. It is\nintended to be a gentle introduction to how we specify algorithms, some of the\ndesign strategies we will use throughout this book, and many of the fundamental\nideas used in algorithm analysis. Later parts of this book will build upon this base.\nChapter 1 provides an overview of algorithms and their place in modern com-\nputing systems. This chapter deﬁnes what an algorithm is and lists some examples.",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 24,
+                "similarity": 0.5211
+              },
+              {
+                "text": "1\nThe Role of Algorithms in Computing\nWhat are algorithms? Why is the study of algorithms worthwhile? What is the role\nof algorithms relative to other technologies used in computers? In this chapter, we\nwill answer these questions.\n1.1\nAlgorithms\nInformally, an algorithm is any well-deﬁned computational procedure that takes\nsome value, or set of values, as input and produces some value, or set of values, as\noutput. An algorithm is thus a sequence of computational steps that transform the",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 26,
+                "similarity": 0.5037
+              },
+              {
+                "text": "Introduction\nWhen we analyze algorithms, we often need to draw upon a body of mathematical\ntools. Some of these tools are as simple as high-school algebra, but others may be\nnew to you. In Part I, we saw how to manipulate asymptotic notations and solve\nrecurrences. This appendix comprises a compendium of several other concepts and\nmethods we use to analyze algorithms. As noted in the introduction to Part I, you\nmay have seen much of the material in this appendix before having read this book",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 1164,
+                "similarity": 0.4702
+              },
+              {
+                "text": "Preface\nBefore there were computers, there were algorithms. But now that there are com-\nputers, there are even more algorithms, and algorithms lie at the heart of computing.\nThis book provides a comprehensive introduction to the modern study of com-\nputer algorithms. It presents many algorithms and covers them in considerable\ndepth, yet makes their design and analysis accessible to all levels of readers. We\nhave tried to keep explanations elementary without sacriﬁcing depth of coverage",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 14,
+                "similarity": 0.4697
+              },
+              {
+                "text": "Contents\nPreface\nxiii\nI\nFoundations\nIntroduction\n3\n1\nThe Role of Algorithms in Computing\n5\n1.1\nAlgorithms\n5\n1.2\nAlgorithms as a technology\n11\n2\nGetting Started\n16\n2.1\nInsertion sort\n16\n2.2\nAnalyzing algorithms\n23\n2.3\nDesigning algorithms\n29\n3\nGrowth of Functions\n43\n3.1\nAsymptotic notation\n43\n3.2\nStandard notations and common functions\n53\n4\nDivide-and-Conquer\n65\n4.1\nThe maximum-subarray problem\n68\n4.2\nStrassen’s algorithm for matrix multiplication\n75\n4.3",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 6,
+                "similarity": 0.463
+              },
+              {
+                "text": "r problem sizes that the differences\nin efﬁciency between algorithms become particularly prominent.\nHaving a solid base of algorithmic knowledge and technique is one characteristic\nthat separates the truly skilled programmers from the novices. With modern com-\nputing technology, you can accomplish some tasks without knowing much about\nalgorithms, but with a good background in algorithms, you can do much, much\nmore.\nExercises\n1.2-1",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 35,
+                "similarity": 0.4615
+              },
+              {
+                "text": "ce in modern com-\nputing systems. This chapter deﬁnes what an algorithm is and lists some examples.\nIt also makes a case that we should consider algorithms as a technology, along-\nside technologies such as fast hardware, graphical user interfaces, object-oriented\nsystems, and networks.\nIn Chapter 2, we see our ﬁrst algorithms, which solve the problem of sorting\na sequence of n numbers. They are written in a pseudocode which, although not",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 24,
+                "similarity": 0.4614
+              },
+              {
+                "text": "t\nalgorithms, but with a good background in algorithms, you can do much, much\nmore.\nExercises\n1.2-1\nGive an example of an application that requires algorithmic content at the applica-\ntion level, and discuss the function of the algorithms involved.\n1.2-2\nSuppose we are comparing implementations of insertion sort and merge sort on the\nsame machine. For inputs of size n, insertion sort runs in 8n2 steps, while merge\nsort runs in 64n lg n steps. For which values of n does insertion sort beat merge",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 35,
+                "similarity": 0.4608
+              },
+              {
+                "text": "14\nChapter 1\nThe Role of Algorithms in Computing\nof algorithms. Algorithms are at the core of most technologies used in contempo-\nrary computers.\nFurthermore, with the ever-increasing capacities of computers, we use them to\nsolve larger problems than ever before. As we saw in the above comparison be-\ntween insertion sort and merge sort, it is at larger problem sizes that the differences\nin efﬁciency between algorithms become particularly prominent.",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 35,
+                "similarity": 0.4502
+              },
+              {
+                "text": "nning time, and the\nfull series remains an engaging and worthwhile reference for many of the topics\npresented here. According to Knuth, the word “algorithm” is derived from the\nname “al-Khowˆarizmˆı,” a ninth-century Persian mathematician.\nAho, Hopcroft, and Ullman [5] advocated the asymptotic analysis of algo-\nrithms—using notations that Chapter 3 introduces, including ‚-notation—as a\nmeans of comparing relative performance. They also popularized the use of re-",
+                "source_file": "data\\ComputerScience\\Algorithm\\Cormen Introduction to Algorithms.pdf",
+                "page_number": 63,
+                "similarity": 0.4483
+              }
+            ]
+          }
+        },
+        {
+          "chapter": 2,
+          "title": "アルゴリズムの歴史",
+          "description": "アルゴリズムの発展過程を振り返り、古典的なアルゴリズムの例を学習します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 3,
+          "title": "データ構造の基礎",
+          "description": "アルゴリズムを理解するために必要なデータ構造について学びます。配列、リスト、スタックなどの基本的なデータ構造を扱います。",
+          "status": "locked"
+        },
+        {
+          "chapter": 4,
+          "title": "アルゴリズムの評価",
+          "description": "アルゴリズムの効率性を評価するための基準、計算量や時間計算量について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 5,
+          "title": "基本的な探索アルゴリズム",
+          "description": "線形探索や二分探索などの基本的な探索アルゴリズムについて学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 6,
+          "title": "基本的なソートアルゴリズム",
+          "description": "バブルソート、選択ソート、挿入ソートなどの基本的なソートアルゴリズムについて学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 7,
+          "title": "再帰とその応用",
+          "description": "再帰的なアルゴリズムの概念と、再帰を用いた問題解決の手法を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 8,
+          "title": "グラフ理論の基礎",
+          "description": "グラフの基本概念と、グラフを用いたアルゴリズムの導入について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 9,
+          "title": "最短経路アルゴリズム",
+          "description": "ダイクストラ法やベルマンフォード法など、最短経路を求めるアルゴリズムについて学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 10,
+          "title": "動的計画法の基礎",
+          "description": "動的計画法の基本概念と、典型的な問題への適用方法について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 11,
+          "title": "貪欲法の紹介",
+          "description": "貪欲法の基本的な考え方と、それを用いた具体的なアルゴリズムの例を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 12,
+          "title": "NP完全問題の理解",
+          "description": "計算複雑性理論の基礎を学び、NP完全問題の概念について理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 13,
+          "title": "アルゴリズムの実装",
+          "description": "実際にプログラミング言語を用いて、学んだアルゴリズムを実装する方法を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 14,
+          "title": "アルゴリズムの最適化",
+          "description": "アルゴリズムを効率的にするための最適化手法について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 15,
+          "title": "アルゴリズムの応用事例",
+          "description": "実世界の問題に対するアルゴリズムの応用事例を学び、実践的な理解を深めます。",
+          "status": "locked"
+        }
+      ],
+      "current_chapter_index": 0
     }
   },
-  "last_active_course": "確率統計（入門）",
+  "last_active_course": "微分積分（入門）",
   "user_profile": {
     "total_exp": 0,
     "daily_exp": 0,
