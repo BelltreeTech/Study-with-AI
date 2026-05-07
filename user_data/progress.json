@@ -297,9 +297,104 @@
         }
       ],
       "current_chapter_index": 0
+    },
+    "【SFC】フランス語_文法-基礎": {
+      "curriculum": [
+        {
+          "chapter": 1,
+          "title": "フランス語の基本構造",
+          "description": "フランス語の文法の基礎を理解するための基本的な構造と文の組み立て方を学びます。",
+          "status": "unlocked"
+        },
+        {
+          "chapter": 2,
+          "title": "名詞と冠詞",
+          "description": "名詞の性と数、冠詞の使用について詳しく学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 3,
+          "title": "形容詞の使い方",
+          "description": "形容詞の性と数の一致、位置について学び、文をより豊かにします。",
+          "status": "locked"
+        },
+        {
+          "chapter": 4,
+          "title": "動詞の基本",
+          "description": "フランス語の動詞の種類と基本的な活用について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 5,
+          "title": "現在時制の活用",
+          "description": "現在時制の規則動詞と不規則動詞の活用法を習得します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 6,
+          "title": "否定文と疑問文",
+          "description": "否定文や疑問文の構造と作り方について学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 7,
+          "title": "前置詞の使い方",
+          "description": "フランス語の前置詞の種類と使い方を詳しく学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 8,
+          "title": "過去時制の活用",
+          "description": "過去時制の理解を深め、直説法の過去形を活用します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 9,
+          "title": "未来形と条件法",
+          "description": "未来形と条件法の基本的な活用方法と使い方を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 10,
+          "title": "代名詞の使い方",
+          "description": "直接目的語と間接目的語の代名詞の使い方を理解します。",
+          "status": "locked"
+        },
+        {
+          "chapter": 11,
+          "title": "接続詞と文の構造",
+          "description": "接続詞を用いた複文の作り方と文の構造を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 12,
+          "title": "形容詞の比較級と最上級",
+          "description": "形容詞の比較級と最上級の形成と使い方を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 13,
+          "title": "動詞の接続法",
+          "description": "接続法の使用場面と基本的な活用を学びます。",
+          "status": "locked"
+        },
+        {
+          "chapter": 14,
+          "title": "文法の応用",
+          "description": "学習した文法を実際の会話や作文に応用する方法を探ります。",
+          "status": "locked"
+        },
+        {
+          "chapter": 15,
+          "title": "総復習と実践",
+          "description": "これまでの学習内容を総復習し、実践的な演習を行います。",
+          "status": "locked"
+        }
+      ],
+      "current_chapter_index": 0
     }
   },
-  "last_active_course": "【SFC】フランス語_文法-入門",
+  "last_active_course": "【SFC】フランス語_文法-基礎",
   "user_profile": {
     "total_exp": 0,
     "daily_exp": 0,
