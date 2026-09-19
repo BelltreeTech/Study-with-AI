@@ -2,7 +2,7 @@
 
 対象の開始commitは `8cee252b629138ba5ce2cca677ba3cc3a0b987dc`。旧コードの機能を調べてから変更した。実進捗JSONをfixtureへ転用していない。
 
-「動作確認済み」は下表の合成データ・mock・ローカル実装の範囲を指す。**実Codexによる文章品質と学習E2Eは未検証**。Providerは実機境界が満たされないため生成を停止する。APIからCodexへ変更したことだけで、本番生成成功とは扱わない。
+「動作確認済み」は下表の合成データ・mock・ローカル実装の範囲を指す。**実Codexによる文章品質と学習E2Eは未検証、実生成は0回**。第2段階の専用CLI 0.155.1では`gpt-6-astra` / `medium`掲載と実効境界を確認した。現在は専用homeの本人のChatGPTログインが未完了で、`auth_required`のみを理由に生成を停止する。モデル掲載やAPIからCodexへの変更だけで、本番生成成功とは扱わない。
 
 | 機能 | 旧コード | 現コード・保存 | 確認した範囲 |
 | --- | --- | --- | --- |
@@ -26,6 +26,11 @@
 | CLI | `main.py` 直接クライアント生成 | UIと同じService/jobs/Provider、search-only/diagnose | import/API経路監査、ローカル検索。実Codex生成は未検証 |
 | 永続化・移行 | `progress.json`、session state | `repository.py` / `learning_repository.py`、SQLite schema1 | 合成旧形式/未知field/同時更新/破損/rollback、原JSON保持、本移行の値一致 |
 | 待機・キャンセル・復旧 | 同期生成、終了処理 | `jobs.py` SQLite+flock、Provider process group | 別プロセス同時1、rerun/多タブclaim、cancel/timeout/orphan、部分出力を成功にしない |
+| 専用CLIの導入・認証 | 直接APIクライアント / 共有環境依存 | `setup_codex.py` / `codex_runtime.py`、専用binary/home、file auth store | 公式0.155.1のintegrity/hash、独立配置、再実行の検証。本人の専用ログインは未完了 |
+| 実効設定・モデル診断 | なし | Providerの公式read-only config/requirements/model RPCとCLI login status | Astra/medium掲載、境界確認、空tool catalogとsentinel隔離。実生成や利用資格の証明とは区別 |
+| 利用枠・内部retry | APIクライアント任せ | app自動0、CLI有限retry許容、unbounded=false、合計期限/cancel | 固定版公式ソース監査とmock回帰。実利用枠到達・内部送信数は未観測 |
+| 合成教材の実E2E手順 | なし | `live_e2e.py`、専用ledger/results/progress、7操作+予備1 | mockで予算・失敗・再開・進捗一度を確認。実7操作と品質レビューは未実行 |
+| 生成内容の品質判定 | 自由文表示 | 合成E2Eのreportと結果digestに結び付く手動review | 引用/教材整合/対話/部分誤答採点のレビュー欄を実装。schema成功だけで品質合格にしない |
 
 ## 初期状態の検証
 
@@ -40,4 +45,6 @@
 
 生成処理のキャンセル・失敗から点数や進捗を作らない。成功しても教材が変わった場合は結果を反映せず、明示的に破棄して再生成できる。ローカル検索はCodexの状態から独立する。model未取得ならBM25と明示する。
 
-未実装・未対応は、Windows実行、旧コード向けSQLite→JSON逆移行、複雑なMermaid描画。実Codex有効化には[CODEX_BOUNDARY.md](CODEX_BOUNDARY.md)の残る境界監査が必要。検証結果・skip・限界は[TEST_REPORT.md](TEST_REPORT.md)に記録する。
+第2段階は第1段階完了commit `ceaaf865cdbaefc125561ca21f14eaa0ef850c98`から継続し、既存の進捗・教材・保存契約を維持した。共有0.152.1は変更せず、認証のコピー・共有logout・API fallbackは行わない。有限CLI内部retryは許容するが、1アプリジョブを1HTTP送信・1推論とは数えない。
+
+未実装・未対応は、Windows実行、旧コード向けSQLite→JSON逆移行、複雑なMermaid描画。実Codex確認は本人の専用homeログイン後、[README](../README.md)の診断と合成E2E手順から再開する。強制設定が新たに現れた場合は保持したまま監査する。現在の実行境界と第1段階の履歴は[CODEX_BOUNDARY.md](CODEX_BOUNDARY.md)、実行済みテスト・skip・未検証の内容品質は[TEST_REPORT.md](TEST_REPORT.md)に記録する。

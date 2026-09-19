@@ -28,6 +28,7 @@ ERROR_MESSAGES = {
     "auth_required": "CodexのChatGPTログインが必要です。",
     "authentication": "CodexのChatGPTログインを確認してください。",
     "model_unavailable": "指定したGPT-6モデルを利用できません。",
+    "model_unconfirmed": "指定モデルの一覧情報が未確認です。管理用の小さな検証を先に実行してください。",
     "rate_limit": "Codexの利用枠に達しました。利用可能になるまで待ってください。",
     "quota_exhausted": "Codexの利用枠に達しました。利用可能になるまで待ってください。",
     "timeout": "生成が制限時間を超えたため停止しました。",

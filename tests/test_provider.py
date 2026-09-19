@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from src.codex_provider import (
     ProviderError,
     boundary_overrides,
     child_environment,
+    prepare_codex_home,
 )
 
 SCHEMA = {"type": "object", "properties": {"answer": {"type": "string"}},
@@ -25,21 +27,34 @@ SCHEMA = {"type": "object", "properties": {"answer": {"type": "string"}},
 
 @pytest.fixture
 def fake_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-    # The fake has no transport or retries. This override is confined to tests;
-    # production has no option/environment variable to waive the audit gate.
-    monkeypatch.setattr("src.codex_provider.AUDITED_CLI_RETRY_CONTROL_VERIFIED", True)
+    # Only tests may substitute an executable for the pinned official binary.
+    monkeypatch.setattr(CodexProvider, "_check_executable", lambda self: None)
+    monkeypatch.setattr("src.codex_provider.managed_policy_present", lambda: False)
     capture = tmp_path / "capture.json"
     executable = tmp_path / "codex-fake"
     executable.write_text(f"#!{sys.executable}\n" + r'''
 import json, os, pathlib, subprocess, sys, time
 if '--version' in sys.argv:
-    print('codex-cli 0.152.1');sys.exit(0)
+    print('codex-cli 0.155.1');sys.exit(0)
 if '--help' in sys.argv:
     print('--ignore-user-config --ephemeral --output-schema --json --strict-config');sys.exit(0)
 if sys.argv[1:3] == ['login','status']:
     print('Logged in using ChatGPT');sys.exit(0)
 if sys.argv[1:3] == ['debug','models']:
     print(json.dumps({'models':[{'slug':'gpt-6-astra','supported_reasoning_levels':[{'effort':'medium'}]}]}));sys.exit(0)
+MODELS = [{'model':'gpt-6-astra','supportedReasoningEfforts':[{'reasoningEffort':'medium'}]}]
+CONFIG = json.loads(FAKE_CONFIG)
+if sys.argv[1] == 'app-server':
+    for line in sys.stdin:
+        request = json.loads(line)
+        if 'id' not in request:continue
+        method = request['method']
+        if method=='initialize':result={}
+        elif method=='config/read':result={'config':CONFIG}
+        elif method=='configRequirements/read':result={'requirements':None}
+        elif method=='model/list':result={'data':MODELS,'nextCursor':None}
+        print(json.dumps({'id':request['id'],'result':result}),flush=True)
+    sys.exit(0)
 data = sys.stdin.read()
 request = json.loads(data)
 case = request.get('case','normal')
@@ -81,12 +96,16 @@ if case=='split':
 elif case!='no_final':
     sys.stdout.write(line);sys.stdout.flush()
 if case!='no_complete':emit({'type':'turn.completed','usage':{'input_tokens':1,'output_tokens':1}})
-'''.replace("CAPTURE", repr(str(capture))), encoding="utf-8")
+'''.replace("CAPTURE", repr(str(capture))).replace("FAKE_CONFIG", repr(json.dumps(
+    tomllib.loads('\n'.join([*boundary_overrides(), 'model="gpt-6-astra"', 'sandbox_mode="read-only"']))
+))), encoding="utf-8")
     executable.chmod(0o700)
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("CODEX_HOME", str(home / ".codex"))
+    monkeypatch.setenv("STUDY_CODEX_HOME", str(tmp_path / "dedicated-home"))
+    prepare_codex_home(CodexSettings())
     return executable, capture
 
 
@@ -185,13 +204,11 @@ def test_cancel_before_start_does_not_spawn(fake_cli: tuple[Path, Path]) -> None
 
 
 def test_global_agents_fails_closed_without_reading_it(fake_cli: tuple[Path, Path]) -> None:
-    codex_home = Path(os.environ["CODEX_HOME"])
-    codex_home.mkdir()
+    codex_home = Path(os.environ["STUDY_CODEX_HOME"])
     (codex_home / "AGENTS.md").write_text("Synthetic private marker, never display")
     provider = provider_for(fake_cli)
     info = provider.diagnostics()
-    assert info["auth"] == "chatgpt"
-    assert info["model_available"]
+    assert info["auth"] == "unknown"
     assert not info["ready"]
     assert not info["boundary_verified"]
     assert "Synthetic private marker" not in json.dumps(info)
@@ -202,9 +219,9 @@ def test_global_agents_fails_closed_without_reading_it(fake_cli: tuple[Path, Pat
 
 
 @pytest.mark.parametrize(("target", "replacement", "code"), [
-    ("gpt-6-astra", "gpt-5.5", "model_unavailable"),
+    ("'model':'gpt-6-astra'", "'model':'gpt-5.5'", "model_unconfirmed"),
     ("Logged in using ChatGPT", "Logged in using an API key", "auth_required"),
-    ("codex-cli 0.152.1", "codex-cli 9.9.9", "boundary_unavailable"),
+    ("codex-cli 0.155.1", "codex-cli 9.9.9", "boundary_unavailable"),
 ])
 def test_diagnostics_block_unapproved_configuration(fake_cli: tuple[Path, Path], target: str,
                                                     replacement: str, code: str) -> None:
@@ -346,27 +363,20 @@ def test_diagnostics_share_one_deadline(fake_cli: tuple[Path, Path]) -> None:
     assert not info["boundary_verified"]
 
 
-def test_unverified_builtin_retry_control_always_blocks_generation(
-    fake_cli: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("src.codex_provider.AUDITED_CLI_RETRY_CONTROL_VERIFIED", False)
+def test_finite_cli_retries_are_allowed_without_app_regeneration(fake_cli: tuple[Path, Path]) -> None:
     provider = provider_for(fake_cli)
     info = provider.diagnostics()
-    assert info["model_available"]
-    assert info["auth"] == "chatgpt"
-    assert not info["retry_control_verified"]
-    assert not info["boundary_verified"]
-    assert not info["ready"]
-    with pytest.raises(ProviderError) as error:
-        provider.generate('{"case":"normal"}', SCHEMA)
-    assert error.value.code == "boundary_unavailable"
-    assert not fake_cli[1].exists()
+    assert info["ready"]
+    assert info["retry_policy"]["application_restarts"] == 0
+    assert info["retry_policy"]["cli_internal"] == "finite"
+    assert info["retry_policy"]["unbounded_connection_retries"] is False
+    assert provider.generate('{"case":"normal"}', SCHEMA) == {"answer": "ok"}
     assert not any(value.startswith("model_providers.openai.") for value in boundary_overrides())
 
 
 @pytest.mark.skipif(os.environ.get("STUDY_RUN_CODEX_BOUNDARY_PROBE") != "1",
                     reason="opt-in installed CLI localhost probe; no credentials or real model")
-def test_installed_cli_has_no_tools_but_global_agents_is_not_isolated() -> None:
+def test_installed_cli_dedicated_home_isolates_tools_instructions_and_hooks() -> None:
     from scripts.probe_codex import local_boundary_probe
 
     result = local_boundary_probe(CodexSettings().executable)
@@ -378,12 +388,81 @@ def test_installed_cli_has_no_tools_but_global_agents_is_not_isolated() -> None:
     assert request["model"] == "gpt-6-astra"
     assert request["reasoning"]["effort"] == "medium"
     assert not request["authorization_present"]
-    assert request["markers"] == {"global_agents": True, "project_agents": False,
-                                  "user_config": False, "skills": False}
-    retry_probe = local_boundary_probe(CodexSettings().executable, (
-        "model_providers.openai.request_max_retries=0",
-        "model_providers.openai.stream_max_retries=0",
-    ))
-    assert retry_probe["config_rejected"]
-    assert not retry_probe["requests"]
-    assert "reserved built-in provider IDs" in retry_probe["stderr_summary"]
+    assert not any(request["markers"].values())
+    assert not any(result["side_effects"].values())
+    assert request["service_tier"] is None
+
+
+@pytest.mark.parametrize("catalog", ["absent", "unavailable"])
+def test_missing_catalog_requires_explicit_probe_then_same_context(fake_cli: tuple[Path, Path], catalog: str) -> None:
+    executable = fake_cli[0]
+    source = executable.read_text()
+    if catalog == "absent":
+        source = source.replace("'data':MODELS", "'data':[]")
+    else:
+        source = source.replace("elif method=='model/list':result={'data':MODELS,'nextCursor':None}",
+                                "elif method=='model/list':\n            print(json.dumps({'id':request['id'],'error':{'code':-1}}),flush=True);continue")
+    executable.write_text(source)
+    provider = provider_for(fake_cli)
+    info = provider.diagnostics()
+    assert info["model_status"] == ("not_listed" if catalog == "absent" else "catalog_unavailable")
+    assert not info["ready"] and info["probe_ready"]
+    with pytest.raises(ProviderError) as error:
+        provider.generate('{"case":"normal"}', SCHEMA)
+    assert error.value.code == "model_unconfirmed"
+    assert not fake_cli[1].exists()
+    assert provider.probe_model('{"case":"metadata"}', SCHEMA) == {"answer": "ok"}
+    info = provider.diagnostics()
+    assert info["ready"] and info["model_status"] == "explicit_probe_succeeded"
+    assert "not attested" in info["model_evidence"]
+    assert provider.generate('{"case":"metadata"}', SCHEMA) == {"answer": "ok"}
+    # Attestation is in memory and tied to exact runtime/auth/config metadata.
+    assert not provider_for(fake_cli).diagnostics()["ready"]
+
+
+def test_explicit_probe_never_ignores_unsupported_model_or_effort(fake_cli: tuple[Path, Path]) -> None:
+    provider = provider_for(fake_cli)
+    with pytest.raises(ProviderError) as error:
+        provider.probe_model('{"case":"error_model"}', SCHEMA)
+    assert error.value.code == "model_unavailable" and provider._successful_probe is None
+    fake_cli[1].unlink()
+    executable = fake_cli[0]
+    executable.write_text(executable.read_text().replace("'reasoningEffort':'medium'", "'reasoningEffort':'high'"))
+    info = provider.diagnostics()
+    assert info["model_status"] == "unsupported_effort" and not info["probe_ready"]
+    with pytest.raises(ProviderError) as error:
+        provider.probe_model('{"case":"normal"}', SCHEMA)
+    assert error.value.code == "model_unavailable" and not fake_cli[1].exists()
+
+
+@pytest.mark.parametrize("case", ["success", "late_error", "cycle", "malformed"])
+def test_model_catalog_reads_hidden_and_all_pages_without_partial_success(fake_cli: tuple[Path, Path], case: str) -> None:
+    executable = fake_cli[0]
+    record = fake_cli[1].with_suffix(".rpc.json")
+    body = (
+        "elif method=='model/list':\n"
+        "            assert request['params']['includeHidden'] is True\n"
+        f"            record=pathlib.Path({str(record)!r})\n"
+        "            seen=json.loads(record.read_text()) if record.exists() else []\n"
+        "            seen.append(request['params']);record.write_text(json.dumps(seen))\n"
+        "            if not request['params'].get('cursor'):result={'data':[], 'nextCursor':'second'}\n"
+    )
+    if case == "success":
+        body += "            else:result={'data':MODELS, 'nextCursor':None}"
+    elif case == "late_error":
+        body = body.replace("'data':[], 'nextCursor':'second'", "'data':MODELS, 'nextCursor':'second'")
+        body += "            else:\n                print(json.dumps({'id':request['id'],'error':{'code':-1}}),flush=True);continue"
+    elif case == "cycle":
+        body += "            else:result={'data':MODELS, 'nextCursor':'second'}"
+    else:
+        body += "            else:result={'data':[None], 'nextCursor':None}"
+    executable.write_text(executable.read_text().replace(
+        "elif method=='model/list':result={'data':MODELS,'nextCursor':None}", body))
+    info = provider_for(fake_cli).diagnostics()
+    assert len(json.loads(record.read_text())) == 2
+    assert info["ready"] == (case == "success")
+    if case == "success":
+        assert info["catalog_pages"] == 2 and info["model_status"] == "listed"
+    else:
+        assert info["probe_ready"] and info["model_status"] == "catalog_unavailable"
+    assert not fake_cli[1].exists()

@@ -2,24 +2,43 @@
 
 PDF教材から学ぶローカルStreamlitアプリです。Dashboard / RAG / Feynman Drill / Curriculum / Libraryの5画面を維持し、生成を共通の公式Codex CLI Providerへ、教材EmbeddingをローカルE5へ移しました。OpenAI SDK、Chat Completions / Responses / Embedding APIの直接呼出し、APIキー設定UIはありません。
 
-**2026-09-19のこのMacでは、実Codex生成は安全側で停止します。** ChatGPTログインは確認済みですが、standalone CLI 0.152.1のモデルcatalogに`gpt-6-astra`がなく、認証の正規保存先にあるglobal AGENTSを個別要求から除外できません。また、この版の組込みOpenAI Providerの内部retry回数を正式設定で制限できることも確認できていません。別モデルやAPIへはfallbackしません。ローカル検索、書庫、履歴、Dashboardは利用できます。詳細は[実行境界](docs/CODEX_BOUNDARY.md)と[検証報告](docs/TEST_REPORT.md)を参照してください。
+**2026-09-19の第2段階では、専用Codex CLI 0.155.1の導入と実行境界の確認まで完了し、専用homeへの本人のChatGPTログインが未完了です。** 指定モデル`gpt-6-astra`と`medium`は新CLIの一覧に掲載され、実効設定の境界確認も通過しています。現在の診断の停止理由は`auth_required`だけです。実生成は**0回**で、文章品質・実学習E2Eはまだ確認していません。ローカル検索、書庫、履歴、Dashboardは利用できます。別モデルやAPIへのfallbackはありません。詳細は[実行境界](docs/CODEX_BOUNDARY.md)、[専用CLI監査](docs/PHASE2_CLI_AUDIT.md)、[検証報告](docs/TEST_REPORT.md)を参照してください。
 
 ## セットアップ
 
-macOS、Python 3.12、uvで検証しました。Python要件は`>=3.12,<3.14`。この実装のジョブ排他にはPOSIX `fcntl`を使うため、Windowsには未対応です。Linuxは未検証です。Codex CLIやグローバル環境を自動更新しません。
+macOS arm64、Python 3.12、uvで検証しました。Python要件は`>=3.12,<3.14`。この実装のジョブ排他にはPOSIX `fcntl`を使うため、Windowsには未対応です。Linuxは未検証です。専用CLIのinstallerはmacOS arm64版を対象とし、共有Codex CLI、Homebrew、Codexアプリ、PATHを更新しません。
 
 ```sh
 cd ~/Developer/projects/Study-with-AI
 uv sync --frozen --extra semantic
-codex --version
-codex login status
+uv run --frozen python scripts/setup_codex.py
+uv run --frozen python scripts/codex_runtime.py --setup-home
+uv run --frozen python scripts/codex_runtime.py --login-command
 ```
 
-ChatGPTに未ログインの場合だけ、本人が`codex login`でログインしてください。既存認証を破棄したり、APIキーを登録したりする必要はありません。認証確認は公式CLIに任せ、アプリがauth.jsonやトークンを独自解析することはありません。
+最後のコマンドはログインを実行せず、本人がターミナルで実行する公式ブラウザログインのコマンドを表示します。専用homeが未認証の場合だけ、表示されたコマンドを実行し、本人がブラウザでChatGPTログインを完了してください。共有Codexの既存ログインはそのまま保持し、認証コピーや共有側のlogoutは行いません。アプリは認証ファイルの内容を読まず、認証・更新・状態確認を公式CLIに任せます。
 
-生成モデルは**GPT-6、実ID `gpt-6-astra`、`model_reasoning_effort="medium"`**です。設定の正本は`src/config.py`と`src/codex_provider.py`の`CodexSettings`です。実行ファイルは起動時PATHから解決した絶対パス、生成timeout 180秒、診断全体15秒、入力64KiB、出力2MiB。同時生成は同じ保存領域を使うアプリ全体で1です。通常UIから任意のコマンド・実行ファイル・CLI引数は設定できません。
+```sh
+# 本人のログイン完了後。同じ専用CLI/home/auth storeで再診断します。
+uv run --frozen python scripts/codex_runtime.py --diagnose
+```
 
-公式モデル掲載とこのアカウント・CLIでの利用可否は別です。[公式モデル一覧](https://learn.chatgpt.com/docs/models)、[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)、[認証](https://learn.chatgpt.com/docs/auth)、[設定](https://learn.chatgpt.com/docs/config-file/config-reference)を確認し、CLIの版・catalog・実行境界を再監査するまでは実生成を有効化しない設計です。
+診断は生成を行いません。`ready: true`になる前は通常生成を開始せず、理由を表示します。組織の強制設定や独自endpoint等を検出した場合はその設定を回避せず、追加監査が必要として停止します。モデル一覧への掲載、ChatGPT認証、サーバーでの実生成成功は別々の確認事項です。
+
+| 設定 | 値 |
+| --- | --- |
+| 生成モデル / reasoning effort | **GPT-6、実ID `gpt-6-astra` / `medium`** |
+| 専用実行ファイル | `~/.local/share/study-with-ai/tools/codex/0.155.1/vendor/aarch64-apple-darwin/bin/codex` |
+| 専用CODEX_HOME | `~/.local/share/study-with-ai/codex-home`、本人所有・0700 |
+| 認証 | `forced_login_method="chatgpt"`、`cli_auth_credentials_store="file"` |
+| service tier | Fastを指定・継承しない。実効設定は通常の既定値 |
+| 上限 | 生成timeout 180秒、診断全体15秒、入力64KiB、stdout/stderr合計2MiB |
+| 同時生成 | 同じ保存領域を使うアプリ全体で1 |
+| 再試行 | アプリの自動再試行0回。CLIの有限内部retryは許容し、無制限接続retryを無効化 |
+
+モデル/effortの正本は`src/config.py`、実行境界・上限の正本は`src/codex_provider.py`の`CodexSettings`です。CLIの版と配布binary hashも照合します。`STUDY_CODEX_BIN` / `STUDY_CODEX_HOME`はローカル管理者用の保存先指定であり、別版・別モデル・共有homeを通す機能ではありません。通常UIに任意コマンド・実行ファイル・CLI引数の入力欄はありません。`CODEX_HOME`を共有shellへexportする必要もありません。
+
+[公式モデル一覧](https://learn.chatgpt.com/docs/models)、[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)、[認証](https://learn.chatgpt.com/docs/auth)、[設定](https://learn.chatgpt.com/docs/config-file/config-reference)と、固定版の公式ソースを確認しました。HTTP/stream内部retryの内訳と利用枠の扱いは[認証・retry監査](docs/PHASE2_AUTH_RETRY_AUDIT.md)に記録しています。1ジョブを1回のHTTP送信・1回の推論・1回の利用枠消費とは数えません。 利用上限に達してもResetクレジットを自動消費せず、有料APIや別モデルへ切り替えません。
 
 ## 教材とローカルモデル
 
@@ -83,7 +102,7 @@ STUDY_CACHE_DIR="$PWD/.study-runtime/demo-cache" \
 uv run --frozen --extra semantic python main.py --subject Example/Study-Basics --question "間隔反復" --search-only
 ```
 
-`--search-only`を外すと生成要求になります。現在の実機制約下では理由付きで停止します。
+`--search-only`を外すと生成要求になります。専用homeのChatGPT認証と実行境界の診断を通過していない場合は、理由付きで停止します。
 
 ## 学習と保存
 
@@ -116,5 +135,19 @@ STUDY_TEST_LOCAL_EMBEDDING=1 uv run --frozen --extra semantic pytest tests/test_
 # opt-in: installed CLIのlocalhost mock probe。実認証・実生成は使用しない
 STUDY_RUN_CODEX_BOUNDARY_PROBE=1 uv run --frozen pytest tests/test_provider.py -q
 ```
+
+本人の専用ログインが完了した後の合成教材による実確認には、専用harnessを使用します。現在は未実行です。
+
+```sh
+# 認証・モデル・境界の確認だけ。生成ジョブは0件。
+uv run --frozen python scripts/live_e2e.py --check-only
+
+# 本人の利用枠を使う明示実行。失敗時の自動再試行はありません。
+uv run --frozen --extra semantic python scripts/live_e2e.py --run --confirm-live
+```
+
+harnessは`.study-runtime/phase2-live`内の合成PDF・答案・DBだけを使用し、本人の教材・進捗には触れません。最小probe、RAG回答、5章curriculum、1章の講義、対話、問題生成、部分誤答の採点の7ジョブを順に実行します。永続ledgerで初回・再開・失敗を通算し、明示再実行の予備1件を含め**累計8ジョブ**が上限です。完了済みの結果を再表示しても生成・進捗加算は繰り返しません。利用枠エラーや認証切れは成功として進めません。
+
+結果は同ディレクトリの`report.json`と`results/`に保存します。`manual-review-template.json`に沿って教材・引用ページ・講義・対話・設問・部分誤答の減点理由・進捗復旧を確認し、具体的な照合根拠を`manual-review.json`へ記録します。構造化JSONの成功だけでは学習品質を合格にせず、現在の品質確認は未実施です。CLI内部の実送信回数・サーバー推論回数は観測できず、レポートでも不明とします。
 
 [機能対応表](docs/FEATURE_INVENTORY.md)、[設計](docs/ARCHITECTURE.md)、[テスト報告](docs/TEST_REPORT.md)、[再開用状態](docs/PROJECT_STATE.md)に確認済み範囲と制約を記録しています。公開CI用の実Codex生成は追加していません。
