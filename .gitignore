@@ -42,10 +42,7 @@ data/*
 # キャッシュフォルダ（もしあれば）
 cache/
 
-# 【重要】進捗データ
-# 自分の成績をGitでバックアップしたいなら、ここはコメントアウト(#)する
-# 他人に公開するなら、除外する
-# progress.json
+# 個人の進捗は下記user_data/で除外。バックアップもGit外へ保存する。
 
 # ==================================================
 # IDE / OS 設定
@@ -57,3 +54,15 @@ cache/
 .DS_Store
 Thumbs.db
 Desktop.ini
+# Private runtime state and test artifacts
+user_data/
+models/
+.study-runtime/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+artifacts/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+sample_data/

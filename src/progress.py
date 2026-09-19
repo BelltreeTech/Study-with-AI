@@ -1,339 +1,328 @@
-"""
-学習進捗の永続化モジュール（複数コース対応）。
+"""Backward-compatible progress API backed by transactional, versioned SQLite.
 
-カリキュラムの進捗データをローカルJSONファイルに保存・復元する。
-データ構造:
-{
-  "courses": {
-    "Deep Learning": {"curriculum": [...], "current_chapter_index": 0},
-    "日本史": {"curriculum": [...], "current_chapter_index": 2}
-  },
-  "last_active_course": "Deep Learning"
-}
+Legacy progress.json is imported once and never modified. All dates use Asia/Tokyo.
+Callers should supply a stable event_id for XP, completions and pomodoro rewards.
 """
 
-import json
+from __future__ import annotations
+
+import datetime
+import hashlib
 from pathlib import Path
 
-# 保存先ディレクトリとファイル
 from src.config import USER_DATA_DIR
+from src.repository import TOKYO, Repository, canonical_json, migrate_legacy_data
 
 k_progressDir: Path = USER_DATA_DIR
 k_progressFile = k_progressDir / "progress.json"
 
 
+def get_repository() -> Repository:
+    return Repository(k_progressDir / "progress.sqlite3", k_progressFile)
+
+
+def _today() -> datetime.date:
+    return datetime.datetime.now(TOKYO).date()
+
+
 def _load_all_data() -> dict:
-    """進捗ファイル全体を読み込む（内部用）。"""
-    if not k_progressFile.exists():
-        return {"courses": {}, "last_active_course": ""}
-    try:
-        raw: str = k_progressFile.read_text(encoding="utf-8")
-        data: dict = json.loads(raw)
-        
-        # 旧フォーマットからのマイグレーション
-        if "courses" not in data:
-            data = _migrate_legacy(data)
-            
-        # 汚染データ「集中学習」の自動クリーンアップ
-        if "courses" in data and "集中学習" in data["courses"]:
-            del data["courses"]["集中学習"]
-            _save_all_data(data)
-            
-        return data
-    except Exception as e:
-        print(f"[Progress] 読み込みに失敗: {e}")
-        return {"courses": {}, "last_active_course": ""}
+    return get_repository().read()
 
 
 def _migrate_legacy(old_data: dict) -> dict:
-    """旧形式（単一コース）のデータを新形式にマイグレーションする。"""
-    topic: str = old_data.get("topic", "Default Course")
-    if not topic:
-        topic = "Default Course"
-    new_data: dict = {
-        "courses": {
-            topic: {
-                "curriculum": old_data.get("curriculum", []),
-                "current_chapter_index": old_data.get("current_chapter_index", 0),
-            }
-        },
-        "last_active_course": topic,
-    }
-    _save_all_data(new_data)
-    return new_data
+    return migrate_legacy_data(old_data)
 
 
 def _save_all_data(data: dict) -> None:
-    """進捗ファイル全体を書き込む（内部用）。"""
-    k_progressDir.mkdir(parents=True, exist_ok=True)
-    try:
-        k_progressFile.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    except Exception as e:
-        print(f"[Progress] 保存に失敗: {e}")
+    """Compatibility snapshot writer. Prefer transactional public update functions."""
+    validated = migrate_legacy_data(data)
+
+    def replace(current: dict) -> None:
+        current.clear()
+        current.update(validated)
+
+    get_repository().update(replace)
+
+
+def _course(data: dict, name: str) -> dict:
+    return data.setdefault("courses", {}).setdefault(name, {"curriculum": [], "current_chapter_index": 0})
+
+
+def _fingerprint(value: object) -> str:
+    return hashlib.sha256(canonical_json(value).encode()).hexdigest()
 
 
 def save_course_progress(
-    course_name: str,
-    curriculum: list[dict],
-    current_chapter_index: int,
+    course_name: str, curriculum: list[dict], current_chapter_index: int, *, metadata: dict | None = None
 ) -> None:
-    """
-    指定したコースの進捗データを保存する。
+    def update(data: dict) -> None:
+        course = _course(data, course_name)
+        if metadata:
+            course.update(metadata)
+        course.update(curriculum=curriculum, current_chapter_index=current_chapter_index)
+        data["last_active_course"] = course_name
 
-    Args:
-        course_name: コース名（トピック名）
-        curriculum: カリキュラムデータ（章のリスト）
-        current_chapter_index: 現在の章インデックス
-    """
-    data: dict = _load_all_data()
-    data["courses"][course_name] = {
-        "curriculum": curriculum,
-        "current_chapter_index": current_chapter_index,
-    }
-    data["last_active_course"] = course_name
-    _save_all_data(data)
+    get_repository().update(update)
 
 
 def load_course_progress(course_name: str) -> dict | None:
-    """
-    指定したコースの進捗データを読み込む。
-
-    Args:
-        course_name: コース名
-
-    Returns:
-        {"curriculum": list, "current_chapter_index": int}
-        コースが存在しない場合は None。
-    """
-    data: dict = _load_all_data()
-    return data["courses"].get(course_name)
+    return _load_all_data()["courses"].get(course_name)
 
 
 def get_all_courses() -> list[str]:
-    """登録されている全コース名のリストを返す。"""
-    data: dict = _load_all_data()
-    return list(data["courses"].keys())
+    return list(_load_all_data()["courses"])
 
 
 def get_last_active_course() -> str:
-    """最後にアクティブだったコース名を返す。"""
-    data: dict = _load_all_data()
-    return data.get("last_active_course", "")
+    return _load_all_data().get("last_active_course", "")
 
 
 def get_course_summary(course_name: str) -> dict:
-    """
-    コースのサマリー情報（章数、完了数、進捗率）を返す。
-
-    Returns:
-        {"total": int, "completed": int, "progress": float, "current_chapter_index": int}
-    """
-    course_data: dict | None = load_course_progress(course_name)
-    if not course_data:
-        return {"total": 0, "completed": 0, "progress": 0.0, "current_chapter_index": 0}
-    curriculum: list[dict] = course_data.get("curriculum", [])
-    total: int = len(curriculum)
-    completed: int = sum(1 for ch in curriculum if ch.get("status") == "completed")
-    progress: float = completed / total if total > 0 else 0.0
+    course = load_course_progress(course_name) or {}
+    curriculum = course.get("curriculum", [])
+    total = len(curriculum)
+    completed = sum(ch.get("status") == "completed" for ch in curriculum)
     return {
         "total": total,
         "completed": completed,
-        "progress": progress,
-        "current_chapter_index": course_data.get("current_chapter_index", 0),
+        "progress": completed / total if total else 0.0,
+        "current_chapter_index": course.get("current_chapter_index", 0),
     }
 
 
 def delete_course(course_name: str) -> None:
-    """指定したコースを削除する。"""
-    data: dict = _load_all_data()
-    if course_name in data["courses"]:
-        del data["courses"][course_name]
-    if data["last_active_course"] == course_name:
-        data["last_active_course"] = ""
-    _save_all_data(data)
+    def remove(data: dict) -> None:
+        data["courses"].pop(course_name, None)
+        if data.get("last_active_course") == course_name:
+            data["last_active_course"] = ""
+
+    get_repository().update(remove)
 
 
 def set_last_active_course(course_name: str) -> None:
-    """最後にアクティブだったコース名を更新する。"""
-    data: dict = _load_all_data()
-    data["last_active_course"] = course_name
-    _save_all_data(data)
+    get_repository().update(lambda data: data.update(last_active_course=course_name))
 
 
-def update_weaknesses(course_name: str, new_weaknesses: list[str]) -> None:
-    """弱点キーワードを更新（新規登録、またはLv.1へのリセット）する。"""
-    if not new_weaknesses:
-        return
-    data: dict = _load_all_data()
-    if course_name not in data["courses"]:
-        data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
-
-    course_data = data["courses"][course_name]
-    if "weaknesses" not in course_data:
-        course_data["weaknesses"] = {}
-
-    today = datetime.date.today()
-    tomorrow = (today + datetime.timedelta(days=1)).isoformat()
-
-    for w in new_weaknesses:
-        w_clean = w.strip()
-        if not w_clean or w_clean.lower() == "なし":
+def _update_weaknesses(data: dict, course_name: str, values: list[str]) -> None:
+    weaknesses = _course(data, course_name).setdefault("weaknesses", {})
+    tomorrow = (_today() + datetime.timedelta(days=1)).isoformat()
+    for keyword in dict.fromkeys(value.strip() for value in values):
+        if not keyword or keyword == "なし":
             continue
-        if w_clean in course_data["weaknesses"]:
-            # 既に存在し、再び間違えた場合はペナルティとしてLv.1にリセットし、エラーカウントを加算
-            course_data["weaknesses"][w_clean]["error_count"] = course_data["weaknesses"][w_clean].get("error_count", 1) + 1
-            course_data["weaknesses"][w_clean]["srs_level"] = 1
-            course_data["weaknesses"][w_clean]["next_review"] = tomorrow
-        else:
-            # 新規登録
-            course_data["weaknesses"][w_clean] = {
-                "error_count": 1,
-                "srs_level": 1,
-                "next_review": tomorrow,
-            }
-    _save_all_data(data)
+        previous = weaknesses.get(keyword, {})
+        if not isinstance(previous, dict):
+            previous = {"legacy_value": previous}
+        previous.update(error_count=previous.get("error_count", 0) + 1, srs_level=1, next_review=tomorrow)
+        weaknesses[keyword] = previous
+
+
+def update_weaknesses(course_name: str, new_weaknesses: list[str], *, event_id: str | None = None) -> None:
+    if new_weaknesses:
+        get_repository().update(
+            lambda data: _update_weaknesses(data, course_name, new_weaknesses),
+            event_id=event_id,
+            fingerprint=_fingerprint(["weaknesses", course_name, new_weaknesses]),
+        )
 
 
 def get_weaknesses(course_name: str) -> dict:
-    """指定したコースの弱点データを取得する。"""
-    data: dict = _load_all_data()
-    course_data = data["courses"].get(course_name, {})
-    return course_data.get("weaknesses", {})
+    return (_load_all_data()["courses"].get(course_name) or {}).get("weaknesses", {})
 
 
-def process_weakness_clear(course_name: str, weakness_keyword: str) -> str:
-    """弱点をクリアした際のレベルアップ処理を行う。戻り値は 'mastered' か 'leveled_up'。"""
-    data: dict = _load_all_data()
-    status = "not_found"
-    if course_name in data["courses"]:
-        weaknesses = data["courses"][course_name].get("weaknesses", {})
-        if weakness_keyword in weaknesses:
-            w_data = weaknesses[weakness_keyword]
-            current_level = w_data.get("srs_level", 1)
+def process_weakness_clear(course_name: str, weakness_keyword: str, *, event_id: str | None = None) -> str:
+    def clear(data: dict) -> str:
+        weaknesses = data["courses"].get(course_name, {}).get("weaknesses", {})
+        if weakness_keyword not in weaknesses:
+            return "not_found"
+        entry = weaknesses[weakness_keyword]
+        if not isinstance(entry, dict):
+            entry = {"legacy_value": entry, "srs_level": 1}
+            weaknesses[weakness_keyword] = entry
+        if entry.get("srs_level", 1) >= 3:
+            del weaknesses[weakness_keyword]
+            return "mastered"
+        entry["srs_level"] = entry.get("srs_level", 1) + 1
+        days = 3 if entry["srs_level"] == 2 else 7
+        entry["next_review"] = (_today() + datetime.timedelta(days=days)).isoformat()
+        return "leveled_up"
 
-            if current_level >= 3:
-                # Lv.3をクリアしたら完全マスター（削除）
-                del weaknesses[weakness_keyword]
-                status = "mastered"
-            else:
-                # レベルアップと次の復習日の設定 (Lv.1 -> 3日後, Lv.2 -> 7日後)
-                new_level = current_level + 1
-                days_to_add = 3 if new_level == 2 else 7
-                w_data["srs_level"] = new_level
-                w_data["next_review"] = (datetime.date.today() + datetime.timedelta(days=days_to_add)).isoformat()
-                status = "leveled_up"
-
-            _save_all_data(data)
+    return get_repository().update(
+        clear, event_id=event_id, fingerprint=_fingerprint(["clear", course_name, weakness_keyword])
+    )[1]
 
 
-import datetime
-
-
-def add_exp(course_name: str, exp_amount: int) -> None:
-    """EXPを加算し、日次リセット判定と履歴（ヒートマップ用）の記録を行う"""
-    data = _load_all_data()
-    today = datetime.date.today().isoformat()
-
-    if "user_profile" not in data:
-        data["user_profile"] = {
-            "total_exp": 0, "daily_exp": 0, "last_active_date": today,
-            "current_streak": 0, "last_streak_date": "", "exp_history": {}
-        }
-
-    profile = data["user_profile"]
-
-    # 履歴データの初期化（古いバージョンからの互換性確保）
-    if "exp_history" not in profile:
-        profile["exp_history"] = {}
-
-    # 日付が変わっていたらデイリーEXPをリセット
+def _add_exp(data: dict, course_name: str | None, exp_amount: int) -> None:
+    if isinstance(exp_amount, bool) or not isinstance(exp_amount, int) or exp_amount < 0:
+        raise ValueError("EXPは0以上の整数で指定してください。")
+    today = _today().isoformat()
+    profile = data.setdefault("user_profile", {})
     if profile.get("last_active_date") != today:
-        profile["daily_exp"] = 0
-        profile["last_active_date"] = today
-
+        profile.update(daily_exp=0, last_active_date=today)
     profile["total_exp"] = profile.get("total_exp", 0) + exp_amount
     profile["daily_exp"] = profile.get("daily_exp", 0) + exp_amount
-
-    # --- ヒートマップ用履歴の記録 ---
-    profile["exp_history"][today] = profile["exp_history"].get(today, 0) + exp_amount
-
-    # コースごとのEXP（course_name が None/空欄 でない場合のみ科目として加算）
+    history = profile.setdefault("exp_history", {})
+    history[today] = history.get(today, 0) + exp_amount
     if course_name:
-        if "courses" not in data:
-            data["courses"] = {}
-        if course_name not in data["courses"]:
-            data["courses"][course_name] = {"curriculum": [], "current_chapter_index": 0}
-        data["courses"][course_name]["exp"] = data["courses"][course_name].get("exp", 0) + exp_amount
+        course = _course(data, course_name)
+        course["exp"] = course.get("exp", 0) + exp_amount
 
-    _save_all_data(data)
+
+def add_exp(course_name: str | None, exp_amount: int, *, event_id: str | None = None) -> None:
+    get_repository().update(
+        lambda data: _add_exp(data, course_name, exp_amount),
+        event_id=event_id,
+        fingerprint=_fingerprint(["xp", course_name, exp_amount]),
+    )
 
 
 def check_and_update_streak(target_daily_exp: int) -> bool:
-    """目標EXPに達していればストリークを更新。更新した場合はTrueを返す。"""
-    data = _load_all_data()
-    profile = data.get("user_profile", {})
-    if not profile:
-        return False
+    if target_daily_exp <= 0:
+        raise ValueError("日次目標は正の整数で指定してください。")
 
-    today = datetime.date.today().isoformat()
-    last_streak = profile.get("last_streak_date", "")
-
-    if last_streak == today:
-        return False  # 今日はすでに達成済み
-
-    if profile.get("daily_exp", 0) >= target_daily_exp:
-        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-        if last_streak == yesterday:
-            profile["current_streak"] = profile.get("current_streak", 0) + 1
-        else:
-            profile["current_streak"] = 1
+    def update(data: dict) -> bool:
+        profile = data.get("user_profile", {})
+        today = _today().isoformat()
+        if profile.get("last_active_date") != today or profile.get("last_streak_date") == today:
+            return False
+        if profile.get("daily_exp", 0) < target_daily_exp:
+            return False
+        yesterday = (_today() - datetime.timedelta(days=1)).isoformat()
+        profile["current_streak"] = (
+            profile.get("current_streak", 0) + 1 if profile.get("last_streak_date") == yesterday else 1
+        )
         profile["last_streak_date"] = today
-        _save_all_data(data)
         return True
-    return False
+
+    return get_repository().update(update)[1]
 
 
 def get_dashboard_data() -> dict:
-    """ダッシュボード表示用のデータを一括取得する。"""
     data = _load_all_data()
-    return {
-        "profile": data.get("user_profile", {"total_exp": 0, "daily_exp": 0, "current_streak": 0}),
-        "courses": data.get("courses", {}),
-    }
+    profile = data.get("user_profile", {"total_exp": 0, "daily_exp": 0, "current_streak": 0})
+    if profile.get("last_active_date") != _today().isoformat():
+        profile["daily_exp"] = 0
+    return {"profile": profile, "courses": data.get("courses", {})}
 
 
-def add_pomodoro_session(minutes: int) -> None:
-    """ポモドーロのセッション回数と累計集中時間を更新する。"""
-    data = _load_all_data()
-    if "user_profile" not in data:
-        data["user_profile"] = {}
-
-    profile = data["user_profile"]
+def _add_pomodoro(data: dict, minutes: int) -> None:
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
+        raise ValueError("集中時間は正の整数で指定してください。")
+    profile = data.setdefault("user_profile", {})
     profile["total_pomodoros"] = profile.get("total_pomodoros", 0) + 1
     profile["focused_minutes"] = profile.get("focused_minutes", 0) + minutes
+    profile["last_pomodoro_at"] = datetime.datetime.now(TOKYO).isoformat()
 
-    _save_all_data(data)
+
+def add_pomodoro_session(minutes: int, *, event_id: str | None = None) -> None:
+    get_repository().update(
+        lambda data: _add_pomodoro(data, minutes), event_id=event_id, fingerprint=_fingerprint(["pomodoro", minutes])
+    )
+
+
+def commit_learning_event(
+    course_name: str | None,
+    event_id: str,
+    *,
+    exp_amount: int = 0,
+    weaknesses: list[str] | None = None,
+    curriculum: list[dict] | None = None,
+    current_chapter_index: int | None = None,
+    grading_result: dict | None = None,
+    pomodoro_minutes: int | None = None,
+    metadata: dict | None = None,
+) -> bool:
+    """Commit an already validated successful result atomically, exactly once.
+
+    The service must check that the owning job succeeded before calling this. A
+    new intentional attempt needs a new event ID; a Streamlit rerun reuses it.
+    """
+    if not event_id:
+        raise ValueError("完了イベントIDが必要です。")
+    payload = [
+        course_name,
+        exp_amount,
+        weaknesses,
+        curriculum,
+        current_chapter_index,
+        grading_result,
+        pomodoro_minutes,
+        metadata,
+    ]
+
+    def commit(data: dict) -> None:
+        if exp_amount:
+            _add_exp(data, course_name, exp_amount)
+        if pomodoro_minutes is not None:
+            _add_pomodoro(data, pomodoro_minutes)
+        if course_name:
+            course = _course(data, course_name)
+            if metadata:
+                course.update(metadata)
+            if curriculum is not None:
+                course["curriculum"] = curriculum
+            if current_chapter_index is not None:
+                course["current_chapter_index"] = current_chapter_index
+            if grading_result is not None:
+                course.setdefault("grade_history", []).append(
+                    {"event_id": event_id, "at": datetime.datetime.now(TOKYO).isoformat(), "result": grading_result}
+                )
+            if weaknesses:
+                _update_weaknesses(data, course_name, weaknesses)
+
+    return get_repository().update(commit, event_id=event_id, fingerprint=_fingerprint(payload))[0]
 
 
 def get_due_reviews() -> list[dict]:
-    """今日復習すべき全科目の弱点リストを取得する。"""
-    import datetime
-    data: dict = _load_all_data()
-    due_reviews: list[dict] = []
-    today = datetime.date.today().isoformat()
+    today = _today().isoformat()
+    reviews = []
+    for course_name, course in _load_all_data().get("courses", {}).items():
+        for keyword, entry in course.get("weaknesses", {}).items():
+            value = entry if isinstance(entry, dict) else {}
+            if value.get("next_review", today) <= today:
+                reviews.append({"course": course_name, "keyword": keyword, "level": value.get("srs_level", 1)})
+    return reviews
 
-    for course_name, course_data in data.get("courses", {}).items():
-        for keyword, w_data in course_data.get("weaknesses", {}).items():
-            # 古いデータで next_review が無い場合は今日復習対象とする
-            next_review = w_data.get("next_review", today) if isinstance(w_data, dict) else today
-            if next_review <= today:
-                level = w_data.get("srs_level", 1) if isinstance(w_data, dict) else 1
-                due_reviews.append({
-                    "course": course_name,
-                    "keyword": keyword,
-                    "level": level,
-                })
-    return due_reviews
+
+def complete_chapter(course_name: str, chapter_index: int, attempt_id: str, *, material_revision: str) -> bool:
+    """Advance the exact graded lecture against its current material revision."""
+    if type(chapter_index) is not int or chapter_index < 0 or not attempt_id or not material_revision:
+        raise ValueError("章の修了対象・採点ID・教材revisionが不正です。")
+    event_id = f"chapter-complete:{course_name}:{chapter_index}"
+
+    def complete(data: dict) -> None:
+        course = data["courses"].get(course_name)
+        if not course or not 0 <= chapter_index < len(course.get("curriculum", [])):
+            raise ValueError("修了対象の章がありません。")
+        grades = [
+            entry["result"]
+            for entry in course.get("grade_history", [])
+            if entry["result"].get("attempt_id") == attempt_id
+        ]
+        if not grades or grades[-1].get("passed") is not True:
+            raise ValueError("検証済みの合格結果がありません。")
+        grade = grades[-1]
+        chapter = course["curriculum"][chapter_index]
+        lecture = chapter.get("lecture_content") or {}
+        if (
+            grade.get("course_id") != course_name
+            or grade.get("chapter_index") != chapter_index
+            or not lecture.get("lecture_id")
+            or grade.get("lecture_id") != lecture["lecture_id"]
+        ):
+            raise ValueError("合格した試験と修了対象の章・現在の講義が一致しません。")
+        if grade.get("material_revision") != material_revision or lecture.get("material_revision") != material_revision:
+            raise ValueError("教材が更新されています。現在の教材で講義と試験を再生成してください。")
+        if chapter.get("status") == "completed":
+            return
+        if chapter.get("status") != "unlocked":
+            raise ValueError("この章はまだ解放されていません。")
+        chapter["status"] = "completed"
+        next_index = min(chapter_index + 1, len(course["curriculum"]) - 1)
+        if next_index > chapter_index and course["curriculum"][next_index].get("status") != "completed":
+            course["curriculum"][next_index]["status"] = "unlocked"
+        course["current_chapter_index"] = max(course.get("current_chapter_index", 0), next_index)
+        _add_exp(data, course_name, 50)
+
+    return get_repository().update(
+        complete, event_id=event_id, fingerprint=_fingerprint(["chapter", course_name, chapter_index])
+    )[0]

@@ -1,253 +1,141 @@
-"""
-Embedding生成モジュール。
+"""Optional local E5 embeddings. Normal application runs never download a model."""
 
-OpenAI Embedding APIを直接呼び出し、テキストをベクトルに変換する。
-結果はキャッシュファイル（.npy/.json）に保存し、再実行時の再生成を回避する。
-
-🧮 【Embedding（埋め込み）の数学的意味】
-Embeddingは、離散的なテキストデータを連続的なベクトル空間の座標に変換する射影関数:
-  f: Text → R^d (d = embedding_dim, 例: 1536)
-
-この変換により、テキスト間の「意味的な距離」をユークリッド空間で測定可能になる。
-- 意味が近いテキスト → ベクトルが近い（コサイン類似度が高い）
-- 意味が遠いテキスト → ベクトルが遠い（コサイン類似度が低い）
-
-💡 【直感的意味とDL概念との紐付け】
-Embeddingは、NLPにおける「Word2Vec」や「GloVe」の進化版。
-TransformerベースのEmbeddingモデル（text-embedding-3-small等）は、
-テキスト全体の文脈を考慮した「文脈的埋め込み」を生成する。
-これはBERT/GPTの中間層から抽出される Hidden State に相当する。
-
-📐 【出力Shape】
-generate_embeddings(["テスト"]) → Shape: (1, 1536)
-generate_embeddings(["a", "b", "c"]) → Shape: (3, 1536)
-"""
+from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
+import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-from openai import OpenAI
 
-# キャッシュディレクトリ
-from src.config import CACHE_DIR, EMBEDDING_MODEL, EMBEDDING_BATCH_SIZE
-
-# Embeddingキャッシュ保存ディレクトリ
-k_cacheDir: Path = CACHE_DIR
-
-# 💡 使用するEmbeddingモデル: text-embedding-3-small
-#    出力次元: 1536次元。大きいモデル(text-embedding-3-large)は3072次元。
-#    次元数が大きいほど表現力は高いが、計算コストとストレージも増加する。
-k_embeddingModel: str = EMBEDDING_MODEL
-
-# 💡 バッチサイズ: 一度のAPI呼び出しで処理するテキスト数。
-#    OpenAI APIは1回のリクエストで最大2048テキストを受け付ける。
-k_batchSize: int = EMBEDDING_BATCH_SIZE
+E5_MODEL = "intfloat/multilingual-e5-small"
+E5_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
 
 
-def _get_client() -> OpenAI:
-    """
-    OpenAIクライアントを生成する。
+@dataclass(frozen=True)
+class EmbeddingSettings:
+    model: str = E5_MODEL
+    revision: str = E5_REVISION
+    dimensions: int = 384
+    max_tokens: int = 512
+    query_prefix: str = "query: "
+    passage_prefix: str = "passage: "
+    normalize: bool = True
+    batch_size: int = 16
 
-    環境変数またはカレントディレクトリの.envからAPIキーを読み込む。
 
-    💡 APIキーはOpenAIのEmbedding APIおよびChat Completion APIの認証に使用。
-    """
-    api_key: str | None = os.environ.get("OPENAI_API_KEY")
+class EmbeddingUnavailable(RuntimeError):
+    """BM25 can continue when the optional model/runtime is unavailable."""
 
-    # .envファイルからの読み込み（環境変数が未設定の場合）
-    if not api_key:
-        env_path = Path(".env")
-        if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line.startswith("OPENAI_API_KEY="):
-                    api_key = line.split("=", 1)[1].strip()
-                    break
 
-    if not api_key:
-        raise ValueError(
-            "OPENAI_API_KEY が設定されていません。"
-            "環境変数またはカレントディレクトリの .env ファイルに設定してください。"
-        )
+def default_model_dir() -> Path:
+    configured = os.environ.get("STUDY_EMBEDDING_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    return Path(__file__).resolve().parents[1] / "models" / "multilingual-e5-small" / E5_REVISION
 
-    return OpenAI(api_key=api_key)
+
+def installed_library_version(name: str) -> str:
+    """Inspect a frozen search path; Streamlit can mutate sys.path during reruns."""
+    context = importlib.metadata.DistributionFinder.Context(name=name, path=list(sys.path))
+    distribution = next(iter(importlib.metadata.Distribution.discover(context=context)), None)
+    return distribution.version if distribution is not None else "unavailable"
+
+
+class LocalEmbedder:
+    def __init__(self, model_dir: Path | None = None, settings: EmbeddingSettings | None = None):
+        self.settings = settings or EmbeddingSettings()
+        self.model_dir = Path(model_dir) if model_dir is not None else default_model_dir()
+        self._model: Any = None
+        self._error: str | None = None
+        # Loaded runtime identities do not change mid-request. Metadata discovery
+        # can transiently fail while another Streamlit script modifies sys.path.
+        self._runtime_versions: dict[str, str] = {}
+        for name in ("sentence-transformers", "transformers", "torch"):
+            self._runtime_versions[name] = installed_library_version(name)
+
+    def identity(self) -> dict:
+        return {**asdict(self.settings), "libraries": dict(self._runtime_versions)}
+
+    def diagnostics(self) -> dict:
+        ready = (self.model_dir / "study-model.json").is_file()
+        return {
+            "model": self.settings.model,
+            "revision": self.settings.revision,
+            "downloaded": ready,
+            "loaded": self._model is not None,
+            "error": self._error,
+            "network_required": False,
+        }
+
+    def _load(self) -> Any:
+        if self._model is not None:
+            return self._model
+        try:
+            manifest = json.loads((self.model_dir / "study-model.json").read_text())
+            if manifest.get("model") != self.settings.model or manifest.get("revision") != self.settings.revision:
+                raise ValueError("取得済みモデルのrevisionが設定と一致しません")
+            from sentence_transformers import SentenceTransformer
+
+            # A local path + local_files_only applies to transformer and tokenizer.
+            # Remote custom Python is prohibited; the script downloads only safe weights.
+            self._model = SentenceTransformer(
+                str(self.model_dir.resolve()),
+                device="cpu",
+                local_files_only=True,
+                trust_remote_code=False,
+                model_kwargs={"use_safetensors": True},
+            )
+            self._model.max_seq_length = self.settings.max_tokens
+            if self._model.get_sentence_embedding_dimension() != self.settings.dimensions:
+                self._model = None
+                raise ValueError("Embedding次元が設定と一致しません")
+            self._error = None
+            return self._model
+        except Exception as exc:
+            self._error = (
+                "ローカルEmbeddingモデル未取得/読込不可。BM25のみで検索します。"
+                "uv run --extra semantic python scripts/download_embedding.py を実行してください。"
+            )
+            raise EmbeddingUnavailable(self._error) from exc
+
+    def encode(self, texts: list[str], *, query: bool = False) -> np.ndarray:
+        if not texts:
+            return np.empty((0, self.settings.dimensions), dtype=np.float32)
+        prefix = self.settings.query_prefix if query else self.settings.passage_prefix
+        try:
+            values = np.asarray(
+                self._load().encode(
+                    [prefix + text for text in texts],
+                    batch_size=self.settings.batch_size,
+                    normalize_embeddings=self.settings.normalize,
+                    convert_to_numpy=True,
+                    show_progress_bar=False,
+                ),
+                dtype=np.float32,
+            )
+            if values.shape != (len(texts), self.settings.dimensions) or not np.isfinite(values).all():
+                raise ValueError("Embedding shape/value mismatch")
+            return values
+        except EmbeddingUnavailable:
+            raise
+        except Exception as exc:
+            self._error = "ローカルEmbedding計算に失敗したためBM25のみで検索します。"
+            raise EmbeddingUnavailable(self._error) from exc
 
 
 def generate_cache_key(pdf_paths: list[str]) -> str:
-    """
-    選択されたPDFの組み合わせからキャッシュキーを生成する。
-
-    🧮 SHA256ハッシュ関数を使用。
-    同一のPDFセット → 常に同一のキー（決定的）が得られるため、
-    PDFが変更されない限りEmbeddingの再生成を回避できる。
-
-    💡 【直感的意味】
-    PDF群の「指紋」を生成する。ファイル名が1つでも変われば異なるキーになる。
-
-    Args:
-        pdf_paths: PDFファイルパスのリスト
-
-    Returns:
-        キャッシュキー文字列（16文字のhex）
-    """
-    # ファイル名のみを抽出してソートし、一意なキーを生成
-    names: list[str] = sorted(Path(p).name for p in pdf_paths)
-    combined: str = "|".join(names)
-    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
+    """Compatibility helper uses full path and bytes, never basenames or sizes."""
+    entries = [(str(Path(p).resolve()), hashlib.sha256(Path(p).read_bytes()).hexdigest()) for p in sorted(pdf_paths)]
+    return hashlib.sha256(json.dumps(entries).encode()).hexdigest()
 
 
-def generate_embeddings(
-    texts: list[str],
-    model: str = k_embeddingModel,
-) -> np.ndarray:
-    """
-    テキストリストからEmbeddingベクトルを生成する。
-
-    🧮 【Embedding生成の内部処理（OpenAI API側）】
-    1. テキストをTokenize（BPE: Byte Pair Encoding）
-    2. トークン列をTransformerエンコーダに入力
-    3. 最終層の出力を平均プーリング（Mean Pooling）して固定長ベクトルを生成
-    4. L2正規化して単位ベクトルに変換
-
-    📐 【Shape の流れ】
-    texts: List[str] (長さ n)
-    → API call → List[List[float]] (n × embedding_dim)
-    → np.array → Shape: (n, embedding_dim)
-
-    💡 【直感的意味】
-    テキストを「意味の座標」に変換する。
-    この変換はニューラルネットワーク（Transformer）が行うため、
-    単なるBag-of-Words（単語の出現頻度）ではなく、文脈を考慮した
-    「深い意味」を捉えたベクトルが得られる。
-
-    Args:
-        texts: ベクトル化するテキストのリスト
-        model: 使用するEmbeddingモデル名
-
-    Returns:
-        形状 (len(texts), embedding_dim) のnumpy配列
-    """
-    client: OpenAI = _get_client()
-    # 📐 型: List[List[float]] — 最終的にnp.arrayに変換される
-    all_embeddings: list[list[float]] = []
-
-    # 💡 バッチ処理: APIの呼び出し回数を減らし、スループットを向上させる
-    #    例: 500チャンク、バッチサイズ100 → 5回のAPI呼び出し
-    for i in range(0, len(texts), k_batchSize):
-        batch: list[str] = texts[i:i + k_batchSize]
-        batch_num: int = i // k_batchSize + 1
-        total_batches: int = (len(texts) + k_batchSize - 1) // k_batchSize
-        print(f"  Embedding生成中... バッチ {batch_num}/{total_batches}")
-
-        try:
-            response = client.embeddings.create(
-                input=batch,
-                model=model,
-            )
-            # 📐 型: List[List[float]] — 各テキストのEmbeddingベクトル
-            #    各要素のShape: (embedding_dim,) — 例: (1536,)
-            batch_embeddings: list[list[float]] = [
-                item.embedding for item in response.data
-            ]
-            all_embeddings.extend(batch_embeddings)
-        except Exception as e:
-            raise RuntimeError(f"Embedding API呼び出しに失敗しました: {e}")
-
-    # 📐 Shape: (len(texts), embedding_dim) — 例: (500, 1536)
-    # 💡 float32を使用（float64の半分のメモリで十分な精度を確保）
-    return np.array(all_embeddings, dtype=np.float32)
-
-
-def save_cache(
-    embeddings: np.ndarray,
-    chunks: list[dict],
-    cache_key: str,
-    cache_dir: Path = k_cacheDir,
-) -> None:
-    """
-    Embeddingベクトルとチャンクデータをキャッシュに保存する。
-
-    💡 Embeddingは .npy（NumPyバイナリ形式）で保存し、高速な読み書きを実現。
-       チャンクメタデータは .json（人間が読めるテキスト形式）で保存。
-
-    📐 保存されるファイル:
-    - embeddings_{cache_key}.npy — Shape: (n_chunks, embedding_dim)
-    - chunks_{cache_key}.json — List[Dict]
-
-    Args:
-        embeddings: Embeddingベクトルの配列
-        chunks: チャンクデータのリスト
-        cache_key: PDF組み合わせに基づくキャッシュキー
-        cache_dir: キャッシュ保存先ディレクトリ
-    """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    npy_path = cache_dir / f"embeddings_{cache_key}.npy"
-    json_path = cache_dir / f"chunks_{cache_key}.json"
-
-    npy_tmp = str(npy_path) + ".tmp"
-    json_tmp = str(json_path) + ".tmp"
-
-    try:
-        # 一時ファイルへ書き込み
-        with open(npy_tmp, "wb") as f:
-            np.save(f, embeddings)
-
-        with open(json_tmp, "w", encoding="utf-8") as f:
-            json.dump(chunks, f, ensure_ascii=False, indent=2)
-
-        # アトミックにリネーム（OSレベルで瞬時に行われる）
-        os.replace(npy_tmp, npy_path)
-        os.replace(json_tmp, json_path)
-
-        print(f"  キャッシュ保存完了: {cache_dir}/ (キー: {cache_key})")
-    except Exception as e:
-        # 失敗時は一時ファイルを削除して例外を再送出
-        if os.path.exists(npy_tmp):
-            os.remove(npy_tmp)
-        if os.path.exists(json_tmp):
-            os.remove(json_tmp)
-        raise RuntimeError(f"キャッシュ保存中にエラーが発生しました: {e}")
-
-
-def load_cache(
-    cache_key: str,
-    cache_dir: Path = k_cacheDir,
-) -> tuple[np.ndarray, list[dict]] | None:
-    """
-    キャッシュからEmbeddingベクトルとチャンクデータを読み込む。
-
-    💡 キャッシュヒット時はAPI呼び出しが不要になるため、
-       起動時間とコストの両方を大幅に削減できる。
-
-    📐 読み込まれるデータ:
-    - embeddings: Shape (n_chunks, embedding_dim)
-    - chunks: List[Dict]
-
-    Args:
-        cache_key: PDF組み合わせに基づくキャッシュキー
-        cache_dir: キャッシュ保存先ディレクトリ
-
-    Returns:
-        (embeddings, chunks) のタプル。キャッシュが存在しない場合は None。
-    """
-    embeddings_path = cache_dir / f"embeddings_{cache_key}.npy"
-    chunks_path = cache_dir / f"chunks_{cache_key}.json"
-
-    if not embeddings_path.exists() or not chunks_path.exists():
-        return None
-
-    try:
-        embeddings: np.ndarray = np.load(embeddings_path)
-
-        with open(chunks_path, "r", encoding="utf-8") as f:
-            chunks: list[dict] = json.load(f)
-
-        print(f"  キャッシュ読み込み完了: {len(chunks)} チャンク (キー: {cache_key})")
-        return embeddings, chunks
-    except Exception as e:
-        print(f"  キャッシュ読み込み失敗（再生成します）: {e}")
-        return None
+def generate_embeddings(texts: list[str], model: str = E5_MODEL, *, query: bool = False) -> np.ndarray:
+    if model != E5_MODEL:
+        raise ValueError("ローカルE5以外のEmbeddingモデルは設定されていません")
+    return LocalEmbedder().encode(texts, query=query)

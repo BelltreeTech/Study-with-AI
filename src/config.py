@@ -1,90 +1,40 @@
-"""
-システム全体の設定値を一元管理するモジュール。
-
-各モジュールで使用される定数をここに集約し、
-ハードコードされたマジックナンバーを排除する。
-"""
-
+"""Project-owned paths and learning policy. No global Codex configuration is edited."""
+import os
+from dataclasses import dataclass
 from pathlib import Path
 
-# ==============================================================
-# ディレクトリ設定
-# ==============================================================
-DATA_DIR: str = "data"
-CACHE_DIR: Path = Path("cache")
-USER_DATA_DIR: Path = Path("user_data")
+ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = os.environ.get('STUDY_DATA_DIR', str(ROOT / 'data'))
+USER_DATA_DIR = Path(os.environ.get('STUDY_STATE_DIR', str(ROOT / 'user_data')))
+CACHE_DIR = Path(os.environ.get('STUDY_CACHE_DIR', str(ROOT / 'cache')))
+LLM_MODEL = 'gpt-6-astra'
+MODEL_EFFORT = 'medium'
+EMBEDDING_MODEL = 'intfloat/multilingual-e5-small'
+EMBEDDING_BATCH_SIZE = 32
+OCR_TEXT_THRESHOLD = 50
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
+DEFAULT_TOP_K = 5
+QUIZ_TOP_K = 3
+LECTURE_TOP_K = 10
+SOCRATIC_HISTORY_LIMIT = 20
+SOCRATIC_CONTEXT_LIMIT = 6000
+PASS_SCORE_EASY = 70
+PASS_SCORE_NORMAL = 80
+PASS_SCORE_HARD = 90
+PASS_SCORES = {'Easy': 70, 'Normal': 80, 'Hard': 90}
+PROMPT_VERSION = 'study-2'
+SCHEMA_VERSION = 'study-2'
 
-# ==============================================================
-# LLM モデル設定
-# ==============================================================
-LLM_MODEL: str = "gpt-4o-mini"
-EMBEDDING_MODEL: str = "text-embedding-3-small"
+@dataclass(frozen=True)
+class LearningOptions:
+    audience: str = '初心者向け (Beginner)'
+    length: str = '普通 (Normal)'
+    tutor_style: str = '標準（理論と具体例）'
+    require_math: bool = False
+    difficulty: str = 'Normal'
+    top_k: int = 5
 
-# ==============================================================
-# Embedding 処理
-# ==============================================================
-EMBEDDING_BATCH_SIZE: int = 100
-
-# ==============================================================
-# PDF / OCR 処理
-# ==============================================================
-OCR_TEXT_THRESHOLD: int = 50  # これ以下のテキスト文字数で画像PDFと判定
-
-# ==============================================================
-# テキストチャンク分割
-# ==============================================================
-CHUNK_SIZE: int = 500
-CHUNK_OVERLAP: int = 100
-
-# ==============================================================
-# RAG検索
-# ==============================================================
-DEFAULT_TOP_K: int = 5
-QUIZ_TOP_K: int = 3      # 試験問題生成時のTop-K
-LECTURE_TOP_K: int = 10   # 講義ノート生成時のTop-K
-
-# ==============================================================
-# LLM パラメータ (Temperature / Max Tokens)
-# ==============================================================
-# クエリ拡張
-TEMPERATURE_QUERY_EXPANSION: float = 0.0
-MAX_TOKENS_QUERY_EXPANSION: int = 200
-
-# RAG回答生成
-TEMPERATURE_RAG_ANSWER: float = 0.3
-MAX_TOKENS_RAG_ANSWER: int = 1024
-
-# 試験問題生成
-TEMPERATURE_QUIZ: float = 0.7
-MAX_TOKENS_QUIZ: int = 3000
-
-# 採点
-TEMPERATURE_GRADING: float = 0.3
-MAX_TOKENS_GRADING: int = 3000
-
-# ソクラテス対話
-TEMPERATURE_SOCRATIC: float = 0.7
-MAX_TOKENS_SOCRATIC: int = 1024
-SOCRATIC_HISTORY_LIMIT: int = 20  # 対話履歴の最大件数
-SOCRATIC_CONTEXT_LIMIT: int = 3000  # 講義コンテキストの最大文字数
-
-# カリキュラム生成
-TEMPERATURE_CURRICULUM: float = 0.7
-MAX_TOKENS_CURRICULUM: int = 1024
-
-# 講義ノート生成
-TEMPERATURE_LECTURE: float = 0.4
-MAX_TOKENS_LECTURE: int = 8000
-
-# ==============================================================
-# 試験 合格ライン
-# ==============================================================
-PASS_SCORE_EASY: int = 70
-PASS_SCORE_NORMAL: int = 80
-PASS_SCORE_HARD: int = 90
-
-PASS_SCORES: dict[str, int] = {
-    "Easy": PASS_SCORE_EASY,
-    "Normal": PASS_SCORE_NORMAL,
-    "Hard": PASS_SCORE_HARD,
-}
+    def __post_init__(self) -> None:
+        if self.difficulty not in PASS_SCORES or not 1 <= self.top_k <= 10:
+            raise ValueError('難易度または検索件数が不正です。')

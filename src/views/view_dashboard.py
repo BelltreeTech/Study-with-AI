@@ -4,10 +4,13 @@
 EXP・称号システム、ストリーク、Plotlyレーダーチャートを表示する。
 """
 
-import streamlit as st
-import plotly.express as px
+from zoneinfo import ZoneInfo
+
 import pandas as pd
-from src.progress import get_dashboard_data, check_and_update_streak, get_due_reviews
+import plotly.express as px
+import streamlit as st
+
+from src.progress import check_and_update_streak, get_dashboard_data, get_due_reviews
 
 
 def get_title(level: int) -> str:
@@ -60,8 +63,12 @@ def render_dashboard() -> None:
     else:
         st.warning(f"⚠️ 今日は **{len(due_reviews)} 個** の復習クエストが発生しています！忘却曲線に打ち勝ちましょう。")
         for review in due_reviews:
-            st.markdown(f"- 📘 **{review['course']}**: `{review['keyword']}` (現在 Lv.{review['level']})")
-        st.info("💡 サイドバーから「模擬試験 (Feynman Drill)」に移動し、「🔥弱点克服特化モード」でクエストに挑戦してください。")
+            st.markdown(
+                f"- 📘 **{courses.get(review['course'], {}).get('title', review['course'])}**: `{review['keyword']}` (現在 Lv.{review['level']})"
+            )
+        st.info(
+            "💡 サイドバーから「模擬試験 (Feynman Drill)」に移動し、「🔥弱点克服特化モード」でクエストに挑戦してください。"
+        )
 
     st.divider()
 
@@ -100,13 +107,14 @@ def render_dashboard() -> None:
     exp_history = profile.get("exp_history", {})
 
     import datetime
+
     # 過去26週分（182日）の日付データを生成
     days_to_show = 182
-    today_date = datetime.date.today()
+    today_date = datetime.datetime.now(ZoneInfo("Asia/Tokyo")).date()
     start_date = today_date - datetime.timedelta(days=days_to_show - 1)
 
     heatmap_data = []
-    today_str = datetime.date.today().isoformat()
+    today_str = datetime.datetime.now(ZoneInfo("Asia/Tokyo")).date().isoformat()
     daily_exp_fallback = profile.get("daily_exp", 0)
 
     for i in range(days_to_show):
@@ -118,12 +126,14 @@ def render_dashboard() -> None:
         if target_str == today_str and exp_val == 0:
             exp_val = daily_exp_fallback
 
-        heatmap_data.append({
-            "date": target_date,
-            "exp": exp_val,
-            "week": i // 7,
-            "day_of_week": target_date.weekday()  # 0: Mon, 6: Sun
-        })
+        heatmap_data.append(
+            {
+                "date": target_date,
+                "exp": exp_val,
+                "week": i // 7,
+                "day_of_week": target_date.weekday(),  # 0: Mon, 6: Sun
+            }
+        )
 
     df_heat = pd.DataFrame(heatmap_data)
     # y軸を曜日、x軸を週にするピボット
@@ -139,7 +149,7 @@ def render_dashboard() -> None:
         y=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
         color_continuous_scale=github_colors,
         range_color=[0, max(50, df_heat["exp"].max() if not df_heat.empty else 100)],
-        aspect="auto"
+        aspect="auto",
     )
 
     fig_heat.update_layout(
@@ -148,7 +158,7 @@ def render_dashboard() -> None:
         plot_bgcolor="white",
         margin=dict(t=10, b=10, l=40, r=10),
         coloraxis_showscale=False,
-        hovermode="closest"
+        hovermode="closest",
     )
     st.plotly_chart(fig_heat, width="stretch")
     st.divider()
@@ -159,7 +169,7 @@ def render_dashboard() -> None:
     for c_name, c_data in courses.items():
         exp = c_data.get("exp", 0)
         if exp > 0:
-            radar_data.append({"科目": c_name, "EXP": exp})
+            radar_data.append({"科目": c_data.get("title", c_name), "EXP": exp})
 
     if radar_data:
         df = pd.DataFrame(radar_data)
