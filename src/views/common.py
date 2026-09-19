@@ -12,6 +12,7 @@ from src.config import LearningOptions
 from src.diagrams import mermaid_to_dot
 from src.runtime import Runtime
 from src.service import LearningRequest
+from src.views.navigation import queue_navigation
 
 
 def scope_key(subject: str, session: str = "", course: str = "", chapter: str = "", view: str = "") -> str:
@@ -23,6 +24,7 @@ def options() -> LearningOptions:
 
 
 def show_text(result: dict) -> None:
+    show_lecture_context(result)
     if result.get("insufficient_evidence"):
         st.warning("教材の根拠が不足しています。この説明だけで理解・正しさを確定しないでください。")
     render_markdown(result.get("markdown", ""))
@@ -30,6 +32,14 @@ def show_text(result: dict) -> None:
         st.caption("一般的な補足（教材からの引用ではありません）")
         render_markdown(result["supplemental_markdown"])
     show_sources(result.get("sources", []))
+
+
+def show_lecture_context(result: dict) -> None:
+    context = result.get("lecture_context")
+    if isinstance(context, dict) and context.get("is_excerpt"):
+        st.caption(f"長い講義から、冒頭・要点・質問に関連する箇所・末尾を抜粋して参照しました "
+                   f"（{context.get('selected_chars', '—')} / {context.get('total_chars', '—')}字）。"
+                   "この応答・問題は参照した範囲が対象です。")
 
 
 def render_markdown(text: str) -> None:
@@ -118,11 +128,14 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
     updates = {req.kind: result}
     pair = None
     if req.kind in ("answer", "dialogue"):
+        content = result["markdown"]
+        if result.get("supplemental_markdown"):
+            content += "\n\n### 一般的な補足（教材からの引用ではありません）\n\n" + result["supplemental_markdown"]
         pair = [
             {"role": "user", "content": req.payload["question"], "material_revision": req.material_revision},
             {
                 "role": "assistant",
-                "content": result["markdown"],
+                "content": content,
                 "result": result,
                 "material_revision": req.material_revision,
             },
@@ -134,7 +147,9 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
             event,
             curriculum=result["chapters"],
             current_chapter_index=0,
-            metadata={"subject": req.subject, "title": req.payload["topic"], "course_id": course_id},
+            metadata={"subject": req.subject, "title": req.payload["topic"], "course_id": course_id,
+                      "learning_options": asdict(req.options), "material_revision": req.material_revision,
+                      "context_coverage": result.get("context_coverage")},
         )
         updates["created_course"] = course_id
     elif req.kind == "lecture":
@@ -181,9 +196,12 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
         if req.payload.get("_weakness"):
             result["weakness_challenge"] = req.payload["_weakness"]
         updates["grade"] = None
-    runtime.store.apply_result(job["id"], scope, updates, message_pair=pair)
+    applied = runtime.store.apply_result(job["id"], scope, updates, message_pair=pair)
+    if applied and req.kind == "curriculum":
+        queue_navigation("Curriculum", req.subject, req.payload["_new_course_id"])
 
 
+@st.fragment(run_every=2)
 def render_pending(runtime: Runtime, scope: str) -> bool:
     """Returns True while active, false once terminal. Apply success receipts once."""
     job_id = runtime.store.get(scope, "pending")
@@ -202,7 +220,7 @@ def render_pending(runtime: Runtime, scope: str) -> bool:
         if col2.button("キャンセル", key="cancel_" + scope):
             runtime.jobs.cancel(job_id)
             st.rerun()
-        st.caption("画面を切り替えても処理は継続します。同じ学習セッションで結果を確認できます。")
+        st.caption("完了すると自動で結果を表示します。画面を切り替えても処理は続き、同じ学習セッションで確認できます。")
         return True
     if state == "succeeded":
         try:

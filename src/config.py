@@ -23,8 +23,13 @@ PASS_SCORE_EASY = 70
 PASS_SCORE_NORMAL = 80
 PASS_SCORE_HARD = 90
 PASS_SCORES = {'Easy': 70, 'Normal': 80, 'Hard': 90}
-PROMPT_VERSION = 'study-2'
+PROMPT_VERSION = 'study-3'
 SCHEMA_VERSION = 'study-2'
+LEARNING_APPROACHES = ('体系的に理解', '例題を多く解く', '実践・プロジェクト', '試験に備える')
+SESSION_MINUTES = (15, 25, 45, 60)
+LEARNING_GOAL_MAX_LENGTH = 1200
+PRIOR_KNOWLEDGE_MAX_LENGTH = 1200
+ANALOGY_DOMAIN_MAX_LENGTH = 300
 
 @dataclass(frozen=True)
 class LearningOptions:
@@ -34,7 +39,23 @@ class LearningOptions:
     require_math: bool = False
     difficulty: str = 'Normal'
     top_k: int = 5
+    learning_goal: str = ''
+    prior_knowledge: str = ''
+    learning_approach: str = '体系的に理解'
+    analogy_domain: str = ''
+    session_minutes: int = 25
 
     def __post_init__(self) -> None:
         if self.difficulty not in PASS_SCORES or not 1 <= self.top_k <= 10:
             raise ValueError('難易度または検索件数が不正です。')
+        for text, maximum, label in (
+            (self.learning_goal, LEARNING_GOAL_MAX_LENGTH, '学習の目的'),
+            (self.prior_knowledge, PRIOR_KNOWLEDGE_MAX_LENGTH, '前提知識'),
+            (self.analogy_domain, ANALOGY_DOMAIN_MAX_LENGTH, 'たとえの分野'),
+        ):
+            if not isinstance(text, str) or len(text) > maximum:
+                raise ValueError(f'{label}は{maximum}文字以内の文章で指定してください。')
+        if self.learning_approach not in LEARNING_APPROACHES:
+            raise ValueError('学び方は表示された選択肢から指定してください。')
+        if type(self.session_minutes) is not int or self.session_minutes not in SESSION_MINUTES:
+            raise ValueError('学習時間は15、25、45、60分のいずれかで指定してください。')

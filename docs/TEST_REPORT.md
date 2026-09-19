@@ -1,6 +1,97 @@
 # 検証報告
 
-## 第2段階（2026-09-19、現在の結果）
+## 第3段階（2026-09-19、現在の結果）
+
+開始HEAD `1a6aaafabf18aa82c3efe917851a5150627807c0`、ブランチ `feat/codex-gpt6-medium-refactor`。macOS arm64 / Python 3.12.13 / Streamlit 1.54.0。同じcheckoutの学習基盤を維持し、個別化した学習導線と公式Codexの実生成を実装・検証した。本人の専用home公式ChatGPTログインは完了済み。再clone、SQLite再移行、main変更、push、merge、履歴書換え、Reset消費は行っていない。本人の教材・進捗・答案を試験に使用していない。
+
+**実コースの5操作（カリキュラム・講義・対話・問題・採点）が成功した。実生成は失敗3件を含めて8ジョブで終了。直接RAG回答の実生成は未検証であり、全経路のE2E完了とは扱わない。**
+
+### 学習機能と回帰検証
+
+5画面を維持し、PDF登録→学習プロフィール→コース作成→続きの章→テスト・復習へ進めるようにした。科目ごとの目標・前提知識・学び方・たとえ・学習時間を保存し、コースの生成条件を固定する。例題・ヒント付き練習・自力確認・間違いからの復習を生成指示へ追加した。質問/答案の下書き、過去答案、進捗再開、生成完了の自動表示、別タブの結果を消さない試験切替を確認した。
+
+通常suiteの最終結果は **410 passed, 2 skipped, 5 warnings in 40.15s**。2件のskipは実CLI境界probeと実ローカルE5のopt-inで、下記の独立実行で成功を確認した。5 warningsは既存PyMuPDF/SWIGのdeprecation。ruff、mypy（42 source files）、Easy70 / Normal80 / Hard90の合格閾値、`git diff --check`も成功した。
+
+```sh
+env -u OPENAI_API_KEY -u CODEX_API_KEY -u AZURE_OPENAI_API_KEY \
+  .venv/bin/python -m pytest -q --junitxml=.study-runtime/phase3-tests.xml
+.venv/bin/ruff check .
+.venv/bin/mypy src app.py main.py scripts
+.venv/bin/python verify_score.py
+git diff --check
+```
+
+通常suiteは合成PDF/fake CLI/Providerだけを使用する。Providerの有限通信retry/既知警告/未知エラー拒否、送信用Schemaの非破壊変換と元Schema検証、代表抜粋と科目分離、長文講義の範囲選択、個別化、補足の引継ぎ、答案のatomicな切替、harnessの累計上限と失敗証拠の保全を追加した。harnessの38件は8件上限、部分検証、失敗の非再分類、再開時の生成0・加点0も確認する。
+
+実出力の点検で、講義の例題が補足にある場合に対話/問題へ渡らないことと、対話の補足の問いが次ターンから消えることを発見した。保存本文40,000字・補足20,000字を変更せず、合わせて6,000字以内の抜粋を別fieldで提供し、新しい会話履歴には補足区分を明示して保存する。保存用`result`の重複で48KB制限へ早く到達する問題も修正し、実際の会話本文・その他入力の上限は維持した。これらは合成Service/AppTestで確認した。実5操作の完了後の修正なので、追加の実生成で検証したとは扱わない。
+
+### 認証・実効設定・実行境界
+
+専用CLI **0.155.1**、専用home `~/.local/share/study-with-ai/codex-home`。本人による公式ChatGPTログイン後の診断は終了0、`auth=chatgpt` / `model=gpt-6-astra` / `effort=medium` / `model_status=listed` / `model_available=true` / `boundary_verified=true` / `ready=true`。`model/list includeHidden=true`の1ページ全件と`config/read` / `configRequirements/read`を照合した。実効値はprovider=`openai`、login=`chatgpt`、file auth store、read-only、approval=`never`、web search無効、service tier既定、unbounded connection retries=false。診断で生成thread/turnは開始しない。
+
+専用binary SHA256は `8eaf1ad12fe6bf89b1710330f58900014322c7c5af677e43be116d8ac5fc0a9e`。共有Homebrew版0.152.1の実体/hash、共有`config.toml` / `AGENTS.md` / `auth.json`のinode・サイズ・mtimeは開始時baselineと不変だった。認証ファイルの内容は読まず、metadataだけ比較した。認証コピー、共有設定の削除・変更、Codexアプリの上書きはしていない。
+
+最終sourceの実CLI localhost境界試験は **1 passed in 0.60s**。それ以前のProvider/recoveryとの統合実行も **84 passed in 30.49s**。両者を通常suiteへ重複加算しない。合成HOMEと認証なしのlocalhost receiverで、tools空、model/medium、10種の指示マーカー混入なし、7種のhooks/MCP副作用なしを確認した。receiverのHTTP400とCLI終了1は意図した試験で、実生成ではない。
+
+```sh
+STUDY_RUN_CODEX_BOUNDARY_PROBE=1 .venv/bin/python -m pytest \
+  tests/test_provider.py::test_installed_cli_dedicated_home_isolates_tools_instructions_and_hooks -q
+```
+
+アプリの自動再生成は0回。CLI内部の有限HTTP/stream再試行と、アプリの総timeout180秒・キャンセル・同時1ジョブ・進捗一度だけの反映を区別する。モデル・effort・APIへのfallbackはない。サービス側のモデル同一性、実送信回数、推論数、各要求の利用枠消費量は独立には観測できない。
+
+### 実生成8ジョブの記録
+
+全件、専用runtimeと`.study-runtime/phase2-live`の合成PDF・答案・独立DB・永続ledgerを使用した。各要求は`gpt-6-astra / medium`固定。失敗も上限へ計上し、次の表の8件以後は生成していない。
+
+| 順序 | 操作 | 実測 |
+| --- | --- | --- |
+| 1 | 最小probe | `process_error`。raw情報を保存していないため原因未確定 |
+| 2 | 根拠を伴うprobe再実行 | `process_error`。CLI終了0・stderr0・最終agent_message1・turn.completed1だが、Code Mode無効の通知を厳格parserが拒否。最終JSON検証未完了なので失敗を維持 |
+| 3 | 構造確認を兼ねるRAG回答 | CLI終了1、HTTP400、Invalid schema、turn.failed。回答未生成 |
+| 4 | 5章カリキュラム | 成功。個別化した目標・前提・練習・到達確認と学習順序 |
+| 5 | 第1章の講義 | 成功。本文と根拠、料理のたとえ、例題2件、練習、自力確認 |
+| 6 | 講義への対話 | 成功。想起と再読の差、料理例A/Bとソクラテス式の問い |
+| 7 | Normal問題 | 成功。4択5問×4点＋記述5問×16点、合計100点 |
+| 8 | 部分誤答の採点 | 成功。Q10が0/16、総得点84点、合格、章完了、50EXP |
+
+2件目の通知のcanonical JSON hashを公式0.155.1の固定sourceから再構成して一致させた。正確なCode Mode停止通知だけを許容し、host/toolsを有効化していない。3件目はschema拒否を確認したが、raw本文を破棄していたためサーバーが指摘した個別keywordは未確定。公式Structured Outputs subsetに合わせ、送信用コピーだけから`uniqueItems` / `minLength` / `maxLength`を除去した。出力には元Schemaの長さ・一意性と業務検証を維持する。[公式supported schemas](https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas)、[詳細な境界と根拠](CODEX_BOUNDARY.md)。
+
+保存した失敗証拠、正常catalog、runtime一致、具体的な修正根拠を照合する明示部分検証モードで残り5件を使用した。`course_flow_completed=true`だが、`technical_flow_completed=false`、`rag_answer_succeeded=false`、`explicit_probe_succeeded=false`。失敗したprobe/回答を成功へ変更していない。終了0も、この区別を消さない。
+
+### 実出力の内容点検と再開
+
+自作`synthetic-note.pdf`は1ページ。想起練習、再読との違い、答え合わせ、間隔反復、1/3/7日の例が万人に最適ではないことを日英で記載した。3つの根拠IDはすべてこのp.1に対応する。5章は読む/思い出す→答え合わせ→失敗時のやり直し→間隔→復習計画の順序で、初学者・例題重視・料理のたとえ・25分という希望に沿う。
+
+Codexによる出力全文の照合では、講義が教材の定義と限界を保持し、一般的補足の料理例では知識の想起と包丁などの実技を区別していた。対話は質問に答えた上でA/Bの理由を尋ねる。問題は教材内の概念を扱い、未習の料理知識を必要としない。採点はQ10の想起/分散/確認の誤解をルーブリックに沿って減点し、Q6/Q7との矛盾、3つの弱点、25分の復習手順を示した。
+
+答案はQ1〜Q9の生成された模範解答を複写し、Q10だけ意図的な誤答にした。このため**独立した採点精度ベンチマークではない**。総得点・合否・章完了・50EXPはアプリが計算した。小さな合成教材での内容照合は、実学習者による教育効果や大規模教材の品質保証とは別である。
+
+保存後、新しいprocessから`diagnostics` / `generate` / `probe_model`を呼ぶと即失敗するNoCalls Providerで同じharnessを再開して成功した。前後ともジョブ8件・50EXP・章completed、結果digest不変。追加の診断・生成・加点は0。証拠はignored領域の`replay-check.json`に保存した。
+
+`manual-review.json`には7項目の具体的照合根拠を記録し、直接RAG根拠支持の1項目を未検証とした。result digestは`46a4afdf561d1078e6352523a7f3c52f7cb1855d263e771abde9071d5bc93ebb`。総合的な`educational_quality`は`manual_review_required`のままとし、全8項目の合格とは扱わない。人間による教育効果評価は未実施。
+
+### APIキーなしの実UIとローカル検索
+
+APIキー3種をunsetし、`sample_data`と`.study-runtime/experience-preview`の分離state/cacheで実Streamlitを起動した。実ブラウザでホーム→科目→目標/前提/料理のたとえ保存→コース作成の導線を確認した。390×844のモバイル表示で横幅`innerWidth=scrollWidth=390`、メニューの開閉とフォーム表示を確認。desktopでもDOMの横overflowはなかった。全5画面の生成・採点・再起動操作はAppTestのmock回帰で検証した。
+
+別の合成fixture UIでは3秒待つFakeProviderで内容相談を1回実行し、手動refreshなしで結果と3件の出典が表示された。DBでも`answer / succeeded / 1件`を確認した。これは実ブラウザの完了自動反映の確認であり、実Codex回答の成功には数えていない。最初の候補port8518は他processが使用していたため変更し、他processを停止していない。
+
+検証用port8517/8531の2サーバーはCtrl+Cで終了0。listenerなしを確認し、作成したブラウザタブも閉じた。ユーザー向けの本番サーバーを放置していない。
+
+実ローカルEmbeddingは **1 passed, 5 warnings in 2.71s**。固定revisionのE5を通信禁止下でCPUロードし、384次元・正規化と日英4質問の期待教材4/4 top1を確認した。モデルなしでのBM25代表抜粋・質問検索も合成テストで成功。Embedding API、実行時の無断モデルダウンロードはない。
+
+### 失敗履歴・制約
+
+通常suiteの途中に`353 passed / 2 failed / 2 skipped`があった。`st.fragment`追加後、ScriptRunContextなしの直接呼出しが実行されないという既存テスト側の問題で、bare関数テストを`__wrapped__`呼出しへ変更しassertは保持した。実fragmentは上記ブラウザで別途検証し、その後`381 passed / 2 skipped`、さらに最後の補足修正後の最終suiteを実施した。補足履歴の新回帰は修正前`2 failed / 1 passed`で欠落を再現し、修正後に成功した。
+
+独立レビューは生成境界、fragment、個別化、試験のatomicな切替、講義の抜粋と補足区分、入力上限と保存互換を対象とした。最終所見は具体的なP1/P2なし。試験は合成データだけで、本人保存先の再移行や内容点検はしていない。
+
+未検証は直接RAG回答の実生成、大規模・画像PDFの品質/実OCR精度、長期の教育効果、Linux。WindowsはPOSIX lock/process groupのため未対応。抜粋方式は全文網羅を保証しない。実アカウントを故意に利用枠超過へ追い込む試験や、Reset消費試験はしていない。
+
+## 第2段階の履歴（2026-09-19、当時の結果）
+
+以下の未ログイン・実生成0件という記録は第2段階完了時点の履歴であり、現在の状態ではない。
 
 開始HEAD `ceaaf865cdbaefc125561ca21f14eaa0ef850c98`、ブランチ `feat/codex-gpt6-medium-refactor` を維持した。macOS arm64 / Python 3.12.13 / Streamlit 1.54.0で検証。再clone、SQLite再移行、本人の教材・進捗を用いた試験、main変更、push、mergeは行っていない。作業は専用CLI・home・能力診断・retry契約・再開harnessに限定し、前段階の5画面と学習/保存基盤を維持した。
 
@@ -39,7 +130,7 @@ STUDY_TEST_LOCAL_EMBEDDING=1 .venv/bin/python -m pytest \
 - 新CLI localhost境界試験: **1 passed, 43 deselected in 0.59s**。合成HOME/専用homeのみ、Authorizationなし、外部転送なし。送信model=`gpt-6-astra`、effort=`medium`、tools空、全10種の指示マーカー混入なし、全7種のhook/MCP副作用なし。mock receiverのHTTP 400とCLI終了1は意図した試験条件。実生成の成功ではない。
 - 実ローカルE5: **1 passed, 5 warnings in 2.70s**。通信を禁止して固定revisionのモデルを実ロードし、日英/言語横断4合成質問で期待教材が4/4 top1、384次元・正規化を確認。品質評価の範囲はこの小さな合成セット。
 - 正式なモデル・設定診断: 同じ専用binary/homeで `model/list includeHidden=true` の全1ページに指定modelとmediumが掲載。`config/read` / `configRequirements/read` で境界を照合し、`boundary_verified=true`。未認証のCLI管理catalogであり、認証済み利用資格やサービス側モデル同一性の証明ではない。`thread/start` / `turn/start` は呼んでいない。
-- 現在の専用home認証: `auth=unavailable`、`ready=false`、`probe_ready=false`。停止理由は **`auth_required` だけ**。診断helperの終了2はこの未認証状態を示す。強制条件を取り除いたりgateを迂回したりしていない。
+- 第2段階終了時の専用home認証: `auth=unavailable`、`ready=false`、`probe_ready=false`。停止理由は **`auth_required` だけ**。診断helperの終了2はこの未認証状態を示す。強制条件を取り除いたりgateを迂回したりしていない。
 - `live_e2e.py --check-only`: 生成ジョブ **0件**、専用合成保存先と8件上限を表示し、同じ未認証状態を確認した。実E2E保存領域の初期化・生成は行っていない。
 
 新CLIのcatalog未掲載問題と専用homeによるglobal AGENTS隔離を再検証し、旧3停止理由をそのまま残していない。内部retryを0にできないだけで停止する旧要件は、本人の追補に従って有限retry許容へ変更した。アプリ自動再生成0、unbounded retry=false、総timeout180秒、cancel/process group回収、進捗一度だけの適用を維持する。実送信回数・サービス側推論数・消費利用枠は不明。利用上限でもResetクレジットを自動消費しない。

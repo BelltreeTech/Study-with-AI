@@ -11,6 +11,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.repository import ensure_private_database_file, sqlite_initialization_lock
+from src.schemas import public_exam
 
 SCHEMA_VERSION = 1
 
@@ -107,6 +108,52 @@ class LearningRepository:
                 (scope, json.dumps(expected_job_id, ensure_ascii=False, allow_nan=False)),
             )
             return cursor.rowcount == 1
+
+    def reset_exam(self, scope: str, expected_attempt_id: str, is_active: Callable[[str], bool]) -> bool:
+        """Compare, archive public questions and clear an attempt atomically.
+
+        The same write lock as claim_submission prevents another tab from
+        submitting a grade or replacing the exam between these operations.
+        is_active may only read the job repository, never write this repository.
+        """
+        if not isinstance(expected_attempt_id, str) or not expected_attempt_id:
+            raise ValueError('終了する試験のIDが不正です。')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+
+            def read(name: str, default: Any = None) -> Any:
+                row = db.execute('SELECT value FROM learning_documents WHERE scope=? AND name=?',
+                                 (scope, name)).fetchone()
+                return json.loads(row[0]) if row else default
+
+            current = read('quiz')
+            if not isinstance(current, dict) or current.get('attempt_id') != expected_attempt_id:
+                return False
+            pending = read('pending')
+            if pending:
+                if not isinstance(pending, str):
+                    raise ValueError('保存済みジョブIDが不正です。')
+                if is_active(pending):
+                    return False
+            answer = read('answer_draft:' + expected_attempt_id, '')
+            if not isinstance(answer, str):
+                raise ValueError('保存済み答案の形式が不正です。元データを保持して停止しました。')
+            if answer:
+                archived = read('answer_archive', [])
+                if not isinstance(archived, list) or any(
+                    not isinstance(item, dict) or not isinstance(item.get('attempt_id'), str) for item in archived
+                ):
+                    raise ValueError('保存済み答案一覧の形式が不正です。元データを保持して停止しました。')
+                if not any(item['attempt_id'] == expected_attempt_id for item in archived):
+                    try:
+                        visible_exam = public_exam(current)
+                    except (KeyError, TypeError) as exc:
+                        raise ValueError('保存済み問題の形式が不正です。元データを保持して停止しました。') from exc
+                    archived.append({'attempt_id': expected_attempt_id, 'exam': visible_exam, 'answer': answer})
+                    self._write(db, scope, 'answer_archive', archived)
+            self._write(db, scope, 'quiz', None)
+            self._write(db, scope, 'grade', None)
+            return True
 
     def append_session(self, registry_scope: str, session_id: str) -> list[str]:
         """Append to the latest registry under one transaction, preserving peers."""

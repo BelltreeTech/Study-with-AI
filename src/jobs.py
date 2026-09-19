@@ -35,6 +35,7 @@ ERROR_MESSAGES = {
     "cancelled": "生成をキャンセルしました。",
     "network_error": "Codexとの通信に失敗しました。",
     "schema_error": "生成結果の形式が不正です。進捗は更新していません。",
+    "schema_unsupported": "Codexが出力形式の設定を拒否しました。アプリのschema互換性を確認してください。",
     "invalid_output": "生成結果を検証できません。進捗は更新していません。",
     "output_limit": "生成出力が上限を超えたため停止しました。",
     "cli_not_found": "公式Codex CLIが見つかりません。",

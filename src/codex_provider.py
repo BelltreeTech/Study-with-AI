@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -30,6 +31,10 @@ HOME_OWNER = {"owner": "study-with-ai", "schema_version": 1}
 HOME_MARKER = "study-with-ai-home.json"
 MODEL_ID = LLM_MODEL
 REASONING_EFFORT = MODEL_EFFORT
+CODE_MODE_DISABLED_WARNING = (
+    "Code Mode is unavailable because code-mode host is disabled. "
+    "Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`."
+)
 DISABLED_FEATURES = (
     "shell_tool", "unified_exec", "apps", "plugins", "hooks", "browser_use",
     "browser_use_external", "computer_use", "image_generation", "multi_agent",
@@ -58,6 +63,74 @@ class ProviderError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def execution_summary(stdout: bytes, stderr: bytes, returncode: int) -> dict[str, Any]:
+    """Structural evidence only: never persist CLI text, prompts, paths or tokens."""
+    known_events = {"thread.started", "turn.started", "turn.completed", "turn.failed",
+                    "item.started", "item.updated", "item.completed", "error"}
+    known_items = {"agent_message", "reasoning", "error", "command_execution", "mcp_tool_call",
+                   "web_search", "file_change", "collab_tool_call", "todo_list"}
+    counts: dict[str, int] = {}
+    notices = []
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            counts["invalid_json"] = counts.get("invalid_json", 0) + 1
+            continue
+        if not isinstance(event, dict):
+            continue
+        kind = event.get("type")
+        name = kind if isinstance(kind, str) and kind in known_events else "unknown_event"
+        counts[name] = counts.get(name, 0) + 1
+        item = event.get("item", {})
+        if isinstance(item, dict):
+            item_type = item.get("type")
+            if isinstance(item_type, str) and item_type in known_items:
+                counts["item:" + item_type] = counts.get("item:" + item_type, 0) + 1
+        if kind in ("error", "turn.failed") or (isinstance(item, dict) and item.get("type") == "error"):
+            # Hashes let an operator compare repeated errors without their content.
+            raw = json.dumps(event, sort_keys=True).encode()
+            notices.append({"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
+    combined = (stdout + b"\n" + stderr).decode("utf-8", errors="replace").lower()
+    signatures = {
+        "finite_reconnect": "reconnecting...", "transport_switch": "falling back from websockets",
+        "model_rerouted": "model rerouted", "metadata_missing": "model metadata",
+        "invalid_schema": "invalid schema", "unsupported_parameter": "unsupported parameter",
+        "unique_items_keyword": "uniqueitems", "min_length_keyword": "minlength", "max_length_keyword": "maxlength",
+        "unexpected_argument": "unexpected argument", "unknown_configuration": "unknown configuration",
+        "unsupported_model": "unsupported model", "unsupported_value": "unsupported value",
+        "not_supported": "not supported", "feature_warning": "under-development features enabled",
+        "bad_request": "400", "unauthorized": "401", "forbidden": "403", "rate_limited": "429",
+        "insufficient_quota": "insufficient_quota", "server_error": "500",
+        "unavailable": "503", "model_not_found": "model_not_found",
+    }
+    return {"returncode": returncode, "stdout_bytes": len(stdout), "stderr_bytes": len(stderr),
+            "stderr_sha256": hashlib.sha256(stderr).hexdigest(), "events": counts,
+            "notices": notices[:32], "signatures": [key for key, token in signatures.items() if token in combined]}
+
+
+def codex_wire_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Project the wire subset; the original schema remains mandatory locally.
+
+    Keep wire string constraints to the documented subset and array constraints
+    to min/maxItems. Length and uniqueness remain mandatory after generation.
+    """
+    result = copy.deepcopy(schema)
+    for keyword in ("uniqueItems", "minLength", "maxLength"):
+        result.pop(keyword, None)
+    for key in ("properties", "$defs", "definitions", "patternProperties"):
+        if isinstance(result.get(key), dict):
+            result[key] = {name: codex_wire_schema(value) if isinstance(value, dict) else value
+                           for name, value in result[key].items()}
+    for key in ("items", "additionalProperties", "not", "if", "then", "else"):
+        if isinstance(result.get(key), dict):
+            result[key] = codex_wire_schema(result[key])
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        if isinstance(result.get(key), list):
+            result[key] = [codex_wire_schema(value) if isinstance(value, dict) else value for value in result[key]]
+    return result
 
 
 def _default_executable() -> str:
@@ -150,6 +223,8 @@ def boundary_overrides() -> list[str]:
 
 def classify_error(text: str, default: str = "process_error") -> ProviderError:
     lower = text.lower()
+    if "invalid schema" in lower:
+        return ProviderError("schema_unsupported", "Codexが出力形式の設定を拒否しました。アプリのschema互換性を確認してください。自動再実行はしません。")
     if any(word in lower for word in ("rate limit", "usage limit", "quota", "429",
                                      "limit reached", "credits", "insufficient_quota")):
         return ProviderError("rate_limited", "Codex の利用枠制限です。利用枠の回復後に手動で再実行してください。")
@@ -170,6 +245,7 @@ class CodexProvider:
         self._verified_binary: tuple | None = None
         self._diagnostic_cache: tuple | None = None
         self._successful_probe: tuple | None = None
+        self.last_execution_metadata: dict[str, Any] = {}
 
     def _run_diagnostic(self, args: list[str], cancel: threading.Event | None = None,
                         timeout_seconds: float | None = None) -> subprocess.CompletedProcess[str]:
@@ -595,6 +671,41 @@ class CodexProvider:
 
     def _parse(self, stdout: bytes, stderr: bytes, returncode: int,
                schema: dict[str, Any], *, allow_missing_metadata: bool = False) -> dict[str, Any]:
+        import re
+
+        def transport_recovery(message: str, *, warning: bool = False) -> bool:
+            # Official 0.155.1 responses_retry.rs emits these *intermediate*
+            # notifications. Exec JSONL loses will_retry from the source RPC.
+            # Keep the allowlist narrow; completed output is still mandatory.
+            if not message or len(message) > 4096 or "\n" in message or "\r" in message:
+                return False
+            forbidden = (
+                "auth", "token", "login", "log in", "credential", "api key",
+                "quota", "usage", "limit", "credits", "billing", "upgrade", "plan",
+                "model", "rerout", "tool", "command", "shell", "sandbox",
+                "permission", "access denied", "forbidden", "401", "403", "429",
+            )
+            if any(word in message.lower() for word in forbidden):
+                return False
+            if warning:
+                prefix = "Falling back from WebSockets to HTTPS transport. "
+                if not message.startswith(prefix):
+                    return False
+                detail = message[len(prefix):]
+            else:
+                match = re.fullmatch(r"Reconnecting\.\.\. [1-5]/5 \((.+)\)", message)
+                if not match:
+                    return False
+                detail = match.group(1)
+            return detail == "request timed out" or any(
+                detail.startswith(prefix) and len(detail) > len(prefix)
+                for prefix in (
+                    "stream disconnected before completion: ",
+                    "Connection failed: ",
+                    "Error while reading the server response: ",
+                )
+            ) or bool(re.fullmatch(r"unexpected status 5\d\d(?: [A-Za-z ]+)?: .+", detail))
+
         if returncode:
             raise classify_error((stdout + b"\n" + stderr).decode("utf-8", errors="replace"))
         if not stdout.endswith(b"\n"):
@@ -602,7 +713,8 @@ class CodexProvider:
         completed = False
         final: str | None = None
         tool_types = {"command_execution", "mcp_tool_call", "web_search", "file_change",
-                      "tool_call", "function_call", "computer_call", "image_generation"}
+                      "tool_call", "function_call", "computer_call", "image_generation",
+                      "collab_tool_call", "todo_list"}
         try:
             for line in stdout.decode("utf-8").splitlines():
                 if not line.strip():
@@ -611,8 +723,6 @@ class CodexProvider:
                 if not isinstance(event, dict):
                     raise ValueError("event is not object")
                 kind = event.get("type")
-                if kind in {"turn.failed", "error"}:
-                    raise classify_error(json.dumps(event))
                 if kind == "turn.completed":
                     completed = True
                 item = event.get("item", {})
@@ -620,8 +730,21 @@ class CodexProvider:
                     raise ValueError("item is not object")
                 if item.get("type") in tool_types:
                     raise ProviderError("tool_violation", "文章生成に不要なツールイベントを検出しました。結果を拒否しました。")
+                if kind == "turn.failed":
+                    raise classify_error(json.dumps(event))
+                if kind == "error":
+                    if not completed and transport_recovery(str(event.get("message", ""))):
+                        continue
+                    raise classify_error(json.dumps(event))
                 if item.get("type") == "error":
                     text = str(item.get("message", ""))
+                    if not completed and text == CODE_MODE_DISABLED_WARNING:
+                        # Official 0.155.1 emits this even when both code_mode and
+                        # code_mode_host are false. It confirms disabled execution;
+                        # never follow its suggestion to enable the host.
+                        continue
+                    if not completed and transport_recovery(text, warning=True):
+                        continue
                     metadata_warning = (
                         f"Model metadata for {MODEL_ID} not found. Defaulting to fallback metadata"
                     )
@@ -658,6 +781,7 @@ class CodexProvider:
 
     def _generate(self, prompt: str, schema: dict[str, Any],
                   cancel_event: threading.Event | None = None, *, explicit_probe: bool = False) -> dict[str, Any]:
+        self.last_execution_metadata = {"stage": "preflight"}
         prompt_bytes = prompt.encode("utf-8")
         if not prompt.strip() or len(prompt_bytes) > self.settings.max_input_bytes:
             raise ProviderError("invalid_request", "入力が空、または入力上限を超えています。教材抜粋を減らしてください。")
@@ -672,11 +796,18 @@ class CodexProvider:
         with tempfile.TemporaryDirectory(prefix="study-with-ai-generation-") as dirname:
             workdir = Path(dirname)
             schema_path = workdir / "response.schema.json"
-            schema_path.write_text(json.dumps(schema), encoding="utf-8")
+            schema_path.write_text(json.dumps(codex_wire_schema(schema)), encoding="utf-8")
             stdout, stderr, returncode = self._execute(
                 self._arguments(workdir, schema_path), prompt_bytes, workdir, cancel,
             )
+            self.last_execution_metadata = {"stage": "parse", **execution_summary(stdout, stderr, returncode)}
             if cancel.is_set():
                 raise ProviderError("cancelled", "生成をキャンセルしました。")
-            return self._parse(stdout, stderr, returncode, schema,
-                               allow_missing_metadata=explicit_probe or self._successful_probe == self._context_identity())
+            try:
+                result = self._parse(stdout, stderr, returncode, schema,
+                                     allow_missing_metadata=explicit_probe or self._successful_probe == self._context_identity())
+            except ProviderError as exc:
+                self.last_execution_metadata["error_code"] = exc.code
+                raise
+            self.last_execution_metadata["stage"] = "completed"
+            return result

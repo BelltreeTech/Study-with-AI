@@ -1,10 +1,12 @@
 # Codex CLI の実行境界と確認結果
 
-確認日: 2026-09-19、macOS arm64。第2段階の実生成は **0 回**。第1段階も **0 回**。合成 HOME / localhost の境界試験、読み取り専用の実効設定診断、実モデル生成を区別する。
+確認日: 2026-09-19、macOS arm64。合成HOME/localhostの境界試験、正式な実効設定診断、本人アカウントでの実生成を区別する。最新の実生成件数・品質・回帰結果は[TEST_REPORT](TEST_REPORT.md)を正本とする。第1・第2段階終了時の実生成は0件で、第3段階で本人が専用homeの公式ログインを完了した。
 
-## 第2段階の現在状態
+## 現在の状態
 
-公式配布の **Codex CLI 0.155.1** をアプリ専用の場所へ並行導入した。新CLIの `gpt-6-astra` / `medium` 掲載と実効設定の検査を確認し、共有Codexの設定・認証から独立した専用homeを準備した。現在の実機診断は `boundary_verified: true`、`model_status: listed`、停止理由は **`auth_required` のみ**。専用homeのChatGPTログインは本人がまだ完了していないため `ready: false` であり、実生成・学習E2E・生成内容の品質は未検証である。
+公式配布の **Codex CLI 0.155.1** をアプリ専用領域へ並行導入済み。本人による専用homeのChatGPTログイン後、`auth: chatgpt`、`model_status: listed`、`model_available: true`、`boundary_verified: true`、`ready: true`を確認した。共有Codexの設定・認証はコピーせず、管理者ポリシー・実行境界は維持している。
+
+第3段階では最小probeのCLI警告を誤って失敗にする不具合を修正した。2件目の実測は終了0・stderr0・agent_message1・turn.completed1だが、当時は最終JSONを保存する前に拒否したため成功に変更しない。警告2件のhashを公式ソースから再構成して完全一致させ、原因を特定した。1件目はraw情報がなく原因未確定である。
 
 | 項目 | 現在の採用値・確認範囲 |
 | --- | --- |
@@ -16,7 +18,7 @@
 | モデルの証拠 | 0.155.1の同梱catalog、および公式app-server `model/list`。掲載はアカウントの利用資格・実生成成功の証明ではない |
 | service tier | Fastを指定しない。実効設定は既定値、mock送信payloadに `service_tier` なし |
 | ツール・設定境界 | 合成localhost試験の `tools=[]`、共有/専用/project sentinelの混入・実行副作用なし、実効設定照合を確認 |
-| 現在の認証 | 専用homeは未認証。共有0.152.1のChatGPTログインをコピー・削除・流用していない |
+| 現在の認証 | 本人が専用homeの公式ChatGPTログインを完了。共有0.152.1の認証をコピー・削除・流用していない |
 | 再試行 | アプリの自動再試行0回、CLI内部は有限retryを許容。無制限接続retryをfalseに固定 |
 
 版・hash・公式資料・合成sentinelの詳細は [PHASE2_CLI_AUDIT.md](PHASE2_CLI_AUDIT.md)、固定版の公式ソースによる認証・retry・管理者ポリシー監査は [PHASE2_AUTH_RETRY_AUDIT.md](PHASE2_AUTH_RETRY_AUDIT.md) を参照する。共有 `/opt/homebrew/bin/codex` は0.152.1のまま。PATH、Homebrew、Codexアプリ、共有設定には変更を加えていない。
@@ -38,7 +40,28 @@
 - stdout/stderrを並行に読み、合計2MiBまでに制限する。診断全体15秒、生成180秒のdeadlineとキャンセルを設け、所有process groupだけを終了・回収する。ジョブの排他lock FDを継承して、親が異常終了しても子の終了まで生成枠を保持する。
 - JSONL完了イベントと最終回答JSONの両方を要求し、schema/domain検証を行う。不完全出力・キャンセル・失敗を成功や採点結果に変換しない。raw診断出力・reasoning・認証内容をUIへ返さない。
 
-通常生成には認証・モデル・境界の全確認を要求する。モデル一覧だけが未確認で、認証と境界を満たす場合は、本人がopt-inした合成harnessの指定モデルprobeだけを許可する。別モデルを推測して試さず、同じ実行環境でその明示要求が完了した事実と、サーバー側のモデル同一性の証明も区別する。現在はモデル掲載を確認できているため、未認証のままこの例外で生成することはできない。
+通常生成には認証・モデル・境界の全確認を要求する。モデル一覧だけが未確認で、認証と境界を満たす場合は、本人がopt-inした合成harnessの指定モデルprobeだけを許可する。別モデルを推測して試さず、同じ実行環境でその明示要求が完了した事実と、サーバー側のモデル同一性の証明も区別する。現在はモデル掲載と専用認証を確認している。catalog未確認の例外を通常UIで無条件に使える設計にはしない。
+
+## 0.155.1の警告と完了判定
+
+固定公式source `be2951ea34f0d295ed0becf97079f92fa5f6950e` を照合した。`exec/src/event_processor_with_jsonl_output.rs` はWarning/ConfigWarning/DeprecationNotice/ModelReroutedを `item.type=error` に変換し、再接続通知の `will_retry` をJSONLへ保持しない。すべてのerrorを致命扱いする実装と、すべてのwarningを無視する実装のどちらも採用しない。
+
+許容するのは既知のhost skill discovery通知、明示probe時の正確なmetadata不足通知、公式の有限 `Reconnecting... N/5 (...)` と同モデルのWebSockets→HTTPS通信方式変更通知、そして正確に一致するCode Mode停止通知だけである。認証・利用枠・モデル変更・tool・権限・4xx・未知通知・完了後の通信errorは拒否する。許容した通知があっても、CLI終了0、`turn.completed`、最終JSON/schema/domain成功のすべてが必要。
+
+実行時の2警告を `json.dumps(event, sort_keys=True)` のbyte数/hashで照合した:
+
+- host discovery: 366 bytes、SHA-256 `6d68f87ee8fdcfea68147f2c9cc7d06f634c6559219890013ea979068985e389`。公式 `codex-rs/features/src/lib.rs:1825` のfeature警告。
+- disabled Code Mode host: 241 bytes、SHA-256 `a6392b61f32ef19e067f816cef3cd273733c79e3a8c292c93d43e5449b5109d1`。公式 `core/src/tools/code_mode/mod.rs` と `code-mode/src/remote_session.rs` の停止通知。通知に書かれたhost有効化・追加ツール導入は行わず、`code_mode=false` / `code_mode_host=false`を維持する。
+
+Providerは終了コード・固定enumのevent件数・errorのbyte数/hash等だけをメモリへ記録する。実harnessはこの非機密metadataを専用ignored保存先へ記録し、raw stdout/stderr、reasoning、教材、認証本文を診断として保存しない。metadataだけでは捨てられた最終JSONのschema成功を後付け証明できない。
+
+## 出力Schemaの送信形式とアプリの検証
+
+実教材回答の最初の要求では、CLI終了1・HTTP 400・`Invalid schema`・`turn.failed`を非機密metadataで確認した。認証や利用枠の失敗とは区別する。元のサーバーエラー本文は保存していないため、拒否された単一keywordの実測までは断定しない。
+
+アプリのSchemaには配列の`uniqueItems`があり、公式Structured Outputsのサポートする配列制約（`minItems`/`maxItems`）の範囲外だった。`codex_wire_schema`はCLIへ渡すコピーだけを対応subsetへ射影する。`uniqueItems`と、文字列の送信制約として保守的に省く`minLength`/`maxLength`は元のSchemaで引き続き検証し、アプリ契約を変更しない。数値範囲・配列件数・required・additionalProperties=falseは送信側にも維持する。最終JSONをProviderとServiceで元のSchemaへ照合し、重複ID・配点・文字数・引用などの不正は従来どおり拒否する。再生成、結果の自動修正、検査の省略はしない。
+
+[公式Structured Outputsの対応Schema](https://developers.openai.com/api/docs/guides/structured-outputs#supported-schemas)を形式仕様として参照した。アプリからAPIを直接呼ぶ経路やAPIキー認証を追加したものではない。
 
 ## 内部retryと利用枠
 
@@ -61,7 +84,7 @@ uv run --frozen --extra semantic python scripts/live_e2e.py --run --confirm-live
 
 `--login-command`はコマンドを表示するだけで、本人のブラウザ操作を代行しない。既存authのコピー・共有側のlogout・APIキーへの変更は不要である。
 
-合成harnessはprobe/回答/curriculum/講義/対話/問題/採点の7ジョブ、永続ledger上で予備1件を含む累計8ジョブを上限とする。個人教材・進捗を使わず、成功済み結果の再表示・再開で生成や進捗加算を繰り返さない。JSON schema通過と教材への整合性は別に判定し、内容品質は根拠を伴う手動レビューが必要。現時点の実E2Eと手動品質レビューは未実施。
+合成harnessは通常probe/回答/curriculum/講義/対話/問題/採点の7段階を実施し、失敗も含む永続ledger上の累計8ジョブを上限とする。今回のprobe失敗2件と回答のSchema拒否1件は失敗のまま保持した。明示flagと修正根拠・正常catalog・保存した実行証拠を照合し、残り5件でカリキュラム・講義・対話・問題・採点を成功させた。累計8件で追加生成は終了し、直接RAG回答と最小probeは未検証のまま。コース部分の成功と全経路の完了を別指標として報告する。個人教材・進捗を使わず、成功済み結果の再表示・再開で生成や進捗加算を繰り返さない。JSON schema通過と教材への整合性は別に判定し、内容品質は根拠を伴う手動レビューが必要。実施済み結果と未検証範囲は最新の検証報告に記載する。
 
 実生成なしで再現する境界試験:
 

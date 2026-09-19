@@ -251,8 +251,10 @@ def test_rejected_success_can_be_explicitly_released(review_runtime, monkeypatch
     }
     runtime.retriever.current_revision = "changed-material"
     ui = minimal_ui(monkeypatch, button=True)
+    # Exercise the fragment body without a Streamlit session; AppTest and the
+    # browser regression cover the decorated polling entry point.
     with pytest.raises(RerunRequested):
-        common.render_pending(runtime, scope)
+        common.render_pending.__wrapped__(runtime, scope)
     assert ui.error.called
     assert runtime.store.get(scope, "pending") is None
     assert runtime.store.get(scope, "rejected_result")["job_id"] == "old-success"
@@ -268,7 +270,7 @@ def test_render_pending_uses_compare_and_clear_after_apply(review_runtime, monke
     monkeypatch.setattr(common, "_apply", lambda *args: runtime.store.set(scope, "pending", "new-job"))
     minimal_ui(monkeypatch)
     with pytest.raises(RerunRequested):
-        common.render_pending(runtime, scope)
+        common.render_pending.__wrapped__(runtime, scope)
     assert runtime.store.get(scope, "pending") == "new-job"
 
 

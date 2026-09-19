@@ -350,20 +350,7 @@ class LocalRetriever:
             state = self._indices[subject]
             if not state["chunks"]:
                 return []
-            lexical = self._bm25(state, query)
-            lexical_order = [int(i) for i in np.argsort(-lexical, kind="stable") if lexical[i] > 0]
-            scores = {i: 1 / (60 + rank) for rank, i in enumerate(lexical_order, start=1)}
-            mode = "bm25"
-            if state["mode"] == "hybrid":
-                try:
-                    query_vector = self.embedder.encode([query], query=True)[0]
-                    semantic = cosine_similarity(query_vector, state["vectors"])
-                    mode = "hybrid"
-                    for rank, i in enumerate(np.argsort(-semantic, kind="stable"), start=1):
-                        scores[int(i)] = scores.get(int(i), 0.0) + 1 / (60 + rank)
-                except (EmbeddingUnavailable, ValueError) as exc:
-                    state["embedding_error"] = str(exc)
-                    state["mode"] = "bm25"
+            scores, lexical, mode = self._rank_chunks(state, query)
             result: list[dict] = []
             remaining = self.settings.max_context_chars
             for i in sorted(scores, key=lambda i: (-scores[i], i))[: min(top_k, self.settings.max_results)]:
@@ -373,6 +360,155 @@ class LocalRetriever:
                 remaining -= len(chunk["text"])
                 result.append({**chunk, "score": scores[i], "bm25_score": float(lexical[i]), "mode": mode})
             return result
+
+    def _rank_chunks(self, state: dict, query: str) -> tuple[dict[int, float], np.ndarray, str]:
+        """Shared E5/BM25 ranking; empty overview requests need no query embedding."""
+        if not query.strip():
+            return {}, np.zeros(len(state["chunks"])), "bm25"
+        lexical = self._bm25(state, query)
+        lexical_order = [int(i) for i in np.argsort(-lexical, kind="stable") if lexical[i] > 0]
+        scores = {i: 1 / (60 + rank) for rank, i in enumerate(lexical_order, start=1)}
+        mode = "bm25"
+        if state["mode"] == "hybrid":
+            try:
+                query_vector = self.embedder.encode([query], query=True)[0]
+                semantic = cosine_similarity(query_vector, state["vectors"])
+                mode = "hybrid"
+                for rank, i in enumerate(np.argsort(-semantic, kind="stable"), start=1):
+                    scores[int(i)] = scores.get(int(i), 0.0) + 1 / (60 + rank)
+            except (EmbeddingUnavailable, ValueError) as exc:
+                state["embedding_error"] = str(exc)
+                state["mode"] = "bm25"
+        return scores, lexical, mode
+
+    def course_context(self, subject: str, query: str, top_k: int = 8) -> list[dict]:
+        """Bounded course overview: balance PDFs, page spread and query relevance.
+
+        This selects representative excerpts, not an assertion of full coverage.
+        Text and provenance stay identical to indexed chunks. Empty queries are
+        useful for a general overview; regular search retains its empty-query rule.
+        """
+        if top_k <= 0:
+            self._subject_path(subject)
+            return []
+        with self._lock:
+            self.index(subject)
+            state = self._indices[subject]
+            chunks = state["chunks"]
+            limit = min(top_k, self.settings.max_results, len(chunks))
+            if limit <= 0 or self.settings.max_context_chars <= 0:
+                return []
+            scores, lexical, mode = self._rank_chunks(state, query)
+            documents: dict[str, dict[int, list[int]]] = {}
+            for i, chunk in enumerate(chunks):
+                documents.setdefault(chunk["source_file"], {}).setdefault(chunk["page_number"], []).append(i)
+            files = sorted(documents)
+            file_indices = {name: i for i, name in enumerate(files)}
+            ranked = sorted(scores, key=lambda i: (-scores[i], i))
+            # If there are more PDFs than slots, retain the strongest match and
+            # spread the remaining choices over the deterministic document order.
+            chosen_files: list[str] = []
+
+            def add_file(name: str) -> None:
+                if name not in chosen_files and len(chosen_files) < limit:
+                    chosen_files.append(name)
+
+            if ranked:
+                add_file(chunks[ranked[0]]["source_file"])
+            add_file(files[0])
+            add_file(files[-1])
+            while len(chosen_files) < min(limit, len(files)):
+                add_file(max((name for name in files if name not in chosen_files), key=lambda name: (
+                    min(abs(file_indices[name] - file_indices[other]) for other in chosen_files),
+                    -file_indices[name],
+                )))
+            most_relevant_file = chunks[ranked[0]]["source_file"] if ranked else None
+            chosen_files.sort(key=lambda name: (name != most_relevant_file, name))
+            quotas = {name: 0 for name in chosen_files}
+            sizes = {name: sum(map(len, documents[name].values())) for name in chosen_files}
+            for _ in range(limit):
+                eligible = [name for name in chosen_files if quotas[name] < sizes[name]]
+                name = min(eligible, key=lambda name: (quotas[name], file_indices[name]))
+                quotas[name] += 1
+
+            plans: dict[str, list[tuple[int, str]]] = {}
+            for name in chosen_files:
+                pages = documents[name]
+                page_numbers = sorted(pages)
+                page_positions = {page: i for i, page in enumerate(page_numbers)}
+                selected: list[tuple[int, str]] = []
+                seen: set[int] = set()
+                seen_pages: set[int] = set()
+
+                def add_chunk(i: int, role: str) -> None:
+                    if i not in seen and len(selected) < quotas[name]:
+                        selected.append((i, role))
+                        seen.add(i)
+                        seen_pages.add(chunks[i]["page_number"])
+
+                def best_page(page: int) -> int:
+                    return max(pages[page], key=lambda i: (scores.get(i, 0.0), -i))
+
+                relevant = [i for i in ranked if chunks[i]["source_file"] == name]
+                if relevant:
+                    add_chunk(relevant[0], "query_relevance")
+                anchors = [page_numbers[0], page_numbers[-1]]
+                if seen_pages:
+                    anchors.sort(key=lambda page: (
+                        -min(abs(page_positions[page] - page_positions[other]) for other in seen_pages), page,
+                    ))
+                for page in anchors:
+                    add_chunk(best_page(page), "representative")
+                # A larger per-document budget may retain a second relevant
+                # page. The other slots remain available for broad page spread.
+                if quotas[name] >= 6:
+                    extra = next((i for i in relevant if chunks[i]["page_number"] not in seen_pages), None)
+                    if extra is not None:
+                        add_chunk(extra, "query_relevance")
+                while len(selected) < quotas[name]:
+                    remaining_pages = [page for page in page_numbers if page not in seen_pages]
+                    if remaining_pages:
+                        page = max(remaining_pages, key=lambda page: (
+                            min(abs(page_positions[page] - page_positions[other]) for other in seen_pages),
+                            scores.get(best_page(page), 0.0), -page,
+                        ))
+                        add_chunk(best_page(page), "representative")
+                    else:
+                        # Once every readable page is represented, spread within
+                        # long pages instead of returning the same chunk twice.
+                        remaining = [i for page in page_numbers for i in pages[page] if i not in seen]
+                        i = max(remaining, key=lambda i: (
+                            min(abs(i - other) for other in seen), scores.get(i, 0.0), -i,
+                        ))
+                        add_chunk(i, "representative")
+                plans[name] = selected
+
+            result: list[dict] = []
+            remaining_chars = self.settings.max_context_chars
+            # Interleave PDFs so a tight character budget does not spend all
+            # available room on the first document's plan. Start with the most
+            # relevant PDF so an especially small budget still keeps its match.
+            for row in range(max(quotas.values())):
+                for name in chosen_files:
+                    if row >= len(plans[name]):
+                        continue
+                    i, role = plans[name][row]
+                    chunk = chunks[i]
+                    if len(chunk["text"]) > remaining_chars:
+                        continue
+                    remaining_chars -= len(chunk["text"])
+                    result.append({**chunk, "score": scores.get(i, 0.0), "bm25_score": float(lexical[i]),
+                                   "mode": mode, "context_role": role})
+            coverage = {
+                "selection_method": "balanced_course_v1", "scope": "representative_excerpts",
+                "material_revision": state["revision"], "pdf_count": len(state["manifest"]["materials"]),
+                "indexed_pdf_count": len(documents), "indexed_page_count": sum(map(len, documents.values())),
+                "selected_pdf_count": len({item["source_file"] for item in result}),
+                "selected_page_count": len({(item["source_file"], item["page_number"]) for item in result}),
+                "selected_chunk_count": len(result),
+                "text_chars": self.settings.max_context_chars - remaining_chars,
+            }
+            return [{**item, "context_coverage": dict(coverage)} for item in result]
 
     def diagnostics(self, subject: str | None = None) -> dict:
         embedding = self.embedder.diagnostics()

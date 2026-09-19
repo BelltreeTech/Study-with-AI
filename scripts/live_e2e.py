@@ -39,6 +39,7 @@ from src.schemas import validate_schema  # noqa: E402
 from src.service import LearningRequest, StudyService  # noqa: E402
 
 OPERATIONS = ('probe', 'answer', 'curriculum', 'lecture', 'dialogue', 'quiz', 'grade')
+COURSE_OPERATIONS = OPERATIONS[2:]
 MAX_JOBS = 8
 SUBJECT = 'Synthetic/Phase2-Learning'
 SESSION = 'phase2-synthetic-session-v1'
@@ -46,6 +47,17 @@ COURSE = 'phase2-synthetic-course-v1'
 IDENTITY = 'study-with-ai-phase2-synthetic-v1'
 PROBE_SCHEMA = {'type': 'object', 'properties': {'ok': {'type': 'boolean', 'enum': [True]}},
                 'required': ['ok'], 'additionalProperties': False}
+# Known 0.155.1 notices reconstructed from its public source and matched against
+# the second failed probe's structural evidence. These are not model outputs.
+RECOVERY_NOTICES = [
+    {'bytes': 366, 'sha256': '6d68f87ee8fdcfea68147f2c9cc7d06f634c6559219890013ea979068985e389'},
+    {'bytes': 241, 'sha256': 'a6392b61f32ef19e067f816cef3cd273733c79e3a8c292c93d43e5449b5109d1'},
+]
+RECOVERY_EVENTS = {'thread.started': 1, 'turn.started': 1, 'item.completed': 3,
+                   'item:error': 2, 'item:agent_message': 1, 'turn.completed': 1}
+# This identifies the saved schema-rejection incident, not its discarded raw
+# message. It is not evidence that any model response passed validation.
+COURSE_FAILURE_METADATA_SHA256 = 'beb86d8356766124abc07bf0a1b865739c05f3200c6b7ad6ed4604985e5fd459'
 REVIEW_CHECKS = ('rag_source_support', 'lecture_source_support', 'dialogue_relevance',
                  'question_alignment', 'partial_wrong_grading', 'grading_reasoning',
                  'citations_and_pages', 'completion_and_restart')
@@ -224,8 +236,6 @@ class Budget:
             if prior:
                 if not evidence or len(evidence.strip()) < 15:
                     raise HarnessHalted('retry_evidence_required', '再実行には具体的な修正根拠を明示してください。')
-                if any(row['attempt'] > 1 for row in rows):
-                    raise HarnessHalted('reserve_exhausted', '予備の再実行1件はすでに使用済みです。')
             elif evidence:
                 raise HarnessHalted('no_failed_operation', '初回操作に予備枠は使用できません。')
             attempt = max((row['attempt'] for row in prior), default=0) + 1
@@ -253,6 +263,16 @@ class Budget:
             if row and row[0] != binding:
                 raise HarnessHalted('runtime_changed', '実行環境が前回と異なります。既存ledgerを保持して確認してください。')
             db.execute("INSERT OR IGNORE INTO live_meta VALUES ('runtime',?)", (binding,))
+
+    def meta(self, key: str) -> dict | None:
+        with self.connect() as db:
+            row = db.execute('SELECT value FROM live_meta WHERE key=?', (key,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def record_recovery(self, value: dict, *, key: str = 'structured_check_with_answer') -> None:
+        with self.connect() as db:
+            db.execute('INSERT OR IGNORE INTO live_meta VALUES (?,?)',
+                       (key, canonical_json(value)))
 
 
 @contextmanager
@@ -292,6 +312,78 @@ class LiveHarness:
                 'maximum_application_jobs': MAX_JOBS, 'diagnostics': info,
                 'resume_command': '.venv/bin/python scripts/live_e2e.py --run --confirm-live'}
 
+    def _recovery_proof(self, budget: Budget) -> dict:
+        """Only this diagnosed parser-warning incident can use the combined check."""
+        probes = [row for row in budget.rows() if row['operation'] == 'probe']
+        if (len(probes) != 2 or [row['attempt'] for row in probes] != [1, 2]
+                or any(row['status'] != 'failed' or row['error_code'] != 'process_error'
+                       or not row['job_id'] for row in probes)):
+            raise HarnessHalted('recovery_proof_required', '既知のprobe失敗2件と保存された診断根拠が必要です。')
+        for row in probes:
+            request = json.loads(row['request'])
+            if (not isinstance(request, dict) or request.get('model') != LLM_MODEL or request.get('effort') != MODEL_EFFORT
+                    or request.get('schema') != PROBE_SCHEMA):
+                raise HarnessHalted('recovery_proof_required', '失敗probeのモデル・effort・schemaが一致しません。')
+        path = self.workspace.root / 'execution' / 'probe-2.json'
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 16_384:
+            raise HarnessHalted('recovery_proof_required', '2回目のprobeの構造診断がありません。')
+        metadata = json.loads(path.read_text())
+        if (not isinstance(metadata, dict) or metadata.get('stage') != 'parse' or metadata.get('error_code') != 'process_error'
+                or metadata.get('returncode') != 0 or metadata.get('stderr_bytes') != 0
+                or metadata.get('stderr_sha256') != hashlib.sha256(b'').hexdigest()
+                or metadata.get('stdout_bytes') != 945 or metadata.get('events') != RECOVERY_EVENTS
+                or metadata.get('notices') != RECOVERY_NOTICES or metadata.get('signatures') != ['feature_warning']):
+            raise HarnessHalted('recovery_proof_required', 'CLI完了・ツール無し・既知警告2件の診断証拠が一致しません。')
+        binding = budget.meta('runtime')
+        if not isinstance(binding, dict) or not binding:
+            raise HarnessHalted('recovery_proof_required', '以前の実行環境の記録がありません。')
+        return {'probe_request_ids': [row['request_id'] for row in probes],
+                'execution_sha256': hashlib.sha256(canonical_json(metadata).encode()).hexdigest(),
+                'runtime': binding}
+
+    def _recorded_recovery(self, budget: Budget) -> dict | None:
+        record = budget.meta('structured_check_with_answer')
+        if record is not None:
+            if not isinstance(record, dict) or record.get('proof') != self._recovery_proof(budget):
+                raise HarnessHalted('recovery_proof_changed', '統合確認の記録と診断根拠が一致しません。')
+            if (record.get('mode') != 'answer' or not isinstance(record.get('evidence'), str)
+                    or len(record['evidence'].strip()) < 15):
+                raise HarnessHalted('recovery_proof_changed', '明示された統合確認の根拠を確認できません。')
+        return record
+
+    def _course_recovery_proof(self, budget: Budget) -> dict:
+        """Bind this partial run to the observed failed answer; never relabel it."""
+        recovery = self._recorded_recovery(budget)
+        answers = [row for row in budget.rows() if row['operation'] == 'answer']
+        if (recovery is None or len(answers) != 1 or answers[0]['attempt'] != 1
+                or answers[0]['status'] != 'failed' or answers[0]['error_code'] != 'process_error'
+                or not answers[0]['job_id']):
+            raise HarnessHalted('course_recovery_proof_required', '保存済みの統合確認と初回回答の失敗証拠が必要です。')
+        answer = answers[0]
+        request = json.loads(answer['request'])
+        if (request.get('kind') != 'answer' or request.get('model') != LLM_MODEL
+                or request.get('effort') != MODEL_EFFORT or request.get('subject') != SUBJECT
+                or request.get('session_id') != SESSION):
+            raise HarnessHalted('course_recovery_proof_required', '失敗回答の科目・セッション・モデルが一致しません。')
+        path = self.workspace.root / 'execution' / 'answer-1.json'
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 16_384:
+            raise HarnessHalted('course_recovery_proof_required', '失敗回答の構造診断がありません。')
+        metadata = json.loads(path.read_text())
+        digest = hashlib.sha256(canonical_json(metadata).encode()).hexdigest()
+        if digest != COURSE_FAILURE_METADATA_SHA256:
+            raise HarnessHalted('course_recovery_proof_required', '確認済みのschema拒否の構造診断と一致しません。')
+        return {'answer_request_id': answer['request_id'], 'execution_sha256': digest,
+                'earlier_recovery': recovery, 'runtime': budget.meta('runtime')}
+
+    def _recorded_course_recovery(self, budget: Budget) -> dict | None:
+        record = budget.meta('course_only_after_answer_failure')
+        if record is not None:
+            if (not isinstance(record, dict) or record.get('mode') != 'course_only'
+                    or not isinstance(record.get('evidence'), str) or len(record['evidence'].strip()) < 15
+                    or record.get('proof') != self._course_recovery_proof(budget)):
+                raise HarnessHalted('course_recovery_proof_changed', '部分検証の記録と失敗診断の根拠が一致しません。')
+        return record
+
     def _request(self, operation: str, service: StudyService, results: dict) -> dict:
         if operation == 'probe':
             return {'request_id': uuid.uuid4().hex, 'kind': 'probe', 'model': LLM_MODEL,
@@ -307,14 +399,20 @@ class LiveHarness:
             if operation != 'lecture':
                 lecture = results['lecture']
                 payloads['dialogue'] = {'question': 'How is active recall different from passive rereading?',
-                                        'lecture': lecture['markdown'], 'lecture_revision': lecture['material_revision']}
+                                        'lecture': lecture['markdown'],
+                                        'lecture_supplement': lecture.get('supplemental_markdown', ''),
+                                        'lecture_revision': lecture['material_revision']}
                 payloads['quiz'] = {'topic': chapter['title'] + ' / retrieval practice and spaced repetition; keep questions and model answers short', 'lecture': lecture['markdown'],
+                                   'lecture_supplement': lecture.get('supplemental_markdown', ''),
                                    'lecture_revision': lecture['material_revision'], 'chapter_index': 0,
                                    'lecture_id': lecture['lecture_id']}
         if operation == 'grade':
             answer, _ = partial_answer(results['quiz'])
             payloads['grade'] = {'exam': results['quiz'], 'answer': answer}
         options = LearningOptions(length='簡潔 (Concise)', top_k=2, difficulty='Normal',
+                                  learning_goal='学習科学の基本を理解して、毎日の復習計画を自分で立てる',
+                                  prior_knowledge='用語は初学者。日常の復習経験はある。',
+                                  learning_approach='例題を多く解く', analogy_domain='料理の練習', session_minutes=25,
                                   tutor_style='ソクラテス・スパルタ' if operation == 'dialogue' else '標準（理論と具体例）')
         request = service.prepare(operation, SUBJECT, SESSION, payloads[operation], options,
                                   course_id=COURSE if operation in ('lecture', 'dialogue', 'quiz', 'grade') else '')
@@ -332,7 +430,10 @@ class LiveHarness:
         event = 'phase2-live:' + row['request_id']
         if operation == 'curriculum':
             progress.commit_learning_event(COURSE, event, curriculum=result['chapters'], current_chapter_index=0,
-                                           metadata={'subject': SUBJECT, 'title': 'Synthetic Phase2 course', 'course_id': COURSE})
+                                           metadata={'subject': SUBJECT, 'title': 'Synthetic Phase2 course', 'course_id': COURSE,
+                                                     'learning_options': result.get('learning_options'),
+                                                     'context_coverage': result.get('context_coverage'),
+                                                     'material_revision': result.get('material_revision')})
         elif operation == 'lecture':
             result['lecture_id'] = row['request_id']
             def save(data: dict) -> None:
@@ -344,20 +445,36 @@ class LiveHarness:
                 progress.complete_chapter(COURSE, 0, result['attempt_id'], material_revision=result['material_revision'])
         store.apply_result(event, IDENTITY, {operation: result})
 
-    def run(self, *, confirm_live: bool, retry_operation: str | None = None, retry_evidence: str | None = None) -> dict:
+    def run(self, *, confirm_live: bool, retry_operation: str | None = None, retry_evidence: str | None = None,
+            structured_check_with_answer: bool = False, recovery_evidence: str | None = None,
+            course_only_after_answer_failure: bool = False) -> dict:
         if not confirm_live:
             raise HarnessHalted('opt_in_required', '--run --confirm-live の明示指定が必要です。')
         if (retry_operation is None) != (retry_evidence is None):
             raise HarnessHalted('retry_evidence_required', '再実行対象と根拠を両方指定してください。')
+        if structured_check_with_answer and course_only_after_answer_failure:
+            raise HarnessHalted('conflicting_recovery', '統合確認とコース部分検証は同時に指定できません。')
+        recovery_requested = structured_check_with_answer or course_only_after_answer_failure
+        if recovery_requested != bool(recovery_evidence and len(recovery_evidence.strip()) >= 15):
+            raise HarnessHalted('recovery_evidence_required', '検証の再開には明示flagと具体的な修正根拠が必要です。')
+        if recovery_evidence is not None and not recovery_requested:
+            raise HarnessHalted('recovery_evidence_required', '再開方法の明示flagが必要です。')
+        if structured_check_with_answer and retry_operation == 'probe':
+            raise HarnessHalted('conflicting_recovery', '回答による確認とprobe再実行は同時に指定できません。')
+        if course_only_after_answer_failure and retry_operation:
+            raise HarnessHalted('conflicting_recovery', '残り5件の部分検証に追加の再試行は含めません。')
         with self.workspace.lock(), synthetic_progress(self.workspace):
             budget = Budget(self.workspace.ledger_path)
-            complete = all((row := budget.latest(op)) and row['status'] == 'succeeded' for op in OPERATIONS)
+            recovery = self._recorded_recovery(budget)
+            course_recovery = self._recorded_course_recovery(budget)
+            operations = COURSE_OPERATIONS if course_recovery else OPERATIONS[1:] if recovery else OPERATIONS
+            complete = all((row := budget.latest(op)) and row['status'] == 'succeeded' for op in operations)
             if complete and not retry_operation:
                 self.workspace.material()
                 # Restore receipts even if a process died after persisting a result
                 # but before updating progress. No diagnostics or generation.
                 store = LearningRepository(self.workspace.state / 'learning.sqlite3')
-                for operation in OPERATIONS:
+                for operation in operations:
                     row = budget.latest(operation)
                     assert row is not None
                     self._apply(operation, row, json.loads(row['result']), store)
@@ -367,6 +484,32 @@ class LiveHarness:
                 raise HarnessHalted('preflight_failed', '指定モデル・medium・ChatGPT認証を確認できません。生成を開始しません。')
             if not info.get('boundary_verified') or not info.get('probe_ready', info.get('ready', False)):
                 raise HarnessHalted('preflight_failed', '認証・実行境界の診断が未完了です。生成を開始しません。')
+            if course_recovery and not course_only_after_answer_failure:
+                raise HarnessHalted('recovery_opt_in_required', '未完了の部分検証は同じ明示flagと根拠を指定して再開してください。')
+            if recovery and not recovery_requested:
+                raise HarnessHalted('recovery_opt_in_required', '未完了の統合確認は同じ明示flagと根拠を指定して再開してください。')
+            if recovery_requested:
+                if not info.get('ready') or info.get('model_status') != 'listed' or info.get('model_available') is not True:
+                    raise HarnessHalted('recovery_catalog_required', '統合確認には通常readyと指定モデル/mediumのcatalog掲載が必須です。')
+            if course_only_after_answer_failure:
+                proof = self._course_recovery_proof(budget)
+                budget.bind_runtime(info)
+                if course_recovery is None:
+                    if len(budget.rows()) != 3:
+                        raise HarnessHalted('course_budget_mismatch', '部分検証の開始には失敗3件と未使用5枠が必要です。')
+                    budget.record_recovery({'mode': 'course_only', 'evidence': recovery_evidence,
+                                            'proof': proof, 'recorded_at': now_iso()},
+                                           key='course_only_after_answer_failure')
+                    course_recovery = self._recorded_course_recovery(budget)
+                operations = COURSE_OPERATIONS
+            elif structured_check_with_answer:
+                proof = self._recovery_proof(budget)
+                budget.bind_runtime(info)
+                if recovery is None:
+                    budget.record_recovery({'mode': 'answer', 'evidence': recovery_evidence,
+                                            'proof': proof, 'recorded_at': now_iso()})
+                    recovery = self._recorded_recovery(budget)
+                operations = OPERATIONS[1:]
             previous_probe = budget.latest('probe')
             if previous_probe and previous_probe['status'] == 'succeeded' and not info.get('ready') and retry_operation != 'probe':
                 raise HarnessHalted('probe_resume_required', 'catalog未確認の再起動後は、根拠付きの明示probe再検証が必要です。自動再実行はしません。')
@@ -385,7 +528,7 @@ class LiveHarness:
             store = LearningRepository(self.workspace.state / 'learning.sqlite3')
             results: dict[str, dict] = {}
             with JobManager(self.workspace.jobs_path) as manager:
-                for operation in OPERATIONS:
+                for operation in operations:
                     row = budget.latest(operation)
                     reprobe = (operation == 'probe' and row and row['status'] == 'succeeded'
                                and not info.get('ready') and retry_operation == 'probe')
@@ -416,6 +559,8 @@ class LiveHarness:
                         raise HarnessHalted('probe_required', '同じ実行環境での明示probeが必要です。')
                     request = self._request(operation, service, results)
                     row = budget.reserve(operation, request, evidence=retry_evidence if row else None)
+                    print(json.dumps({'live_operation': operation, 'state': 'reserved', 'reserved_jobs': len(budget.rows()),
+                                      'maximum_jobs': MAX_JOBS}), file=sys.stderr, flush=True)
                     worker: Callable[[threading.Event], dict]
                     if operation == 'probe':
                         def probe_worker(event: threading.Event) -> dict:
@@ -441,6 +586,9 @@ class LiveHarness:
                         if job['state'] in TERMINAL_STATES:
                             break
                         time.sleep(.05)
+                    metadata = getattr(self.provider, 'last_execution_metadata', None)
+                    if isinstance(self.provider, CodexProvider) and isinstance(metadata, dict):
+                        atomic_json(self.workspace.root / 'execution' / f'{operation}-{row["attempt"]}.json', metadata)
                     if job['state'] != 'succeeded':
                         budget.update(row, status=job['state'], error_code=job['error_code'])
                         self.report(budget)
@@ -453,6 +601,7 @@ class LiveHarness:
                     self._apply(operation, row, result, store)
                     results[operation] = result
                     self.report(budget)
+                    print(json.dumps({'live_operation': operation, 'state': 'succeeded'}), file=sys.stderr, flush=True)
             return self.report(budget)
 
     def report(self, budget: Budget) -> dict:
@@ -475,13 +624,28 @@ class LiveHarness:
         quality_accepted = bool(review and review.get('result_digest') == result_digest and review.get('reviewer') and review.get('reviewed_at') and all(
             review.get('checks', {}).get(key, {}).get('status') == 'pass'
             and len(review['checks'][key].get('evidence', '').strip()) >= 20 for key in REVIEW_CHECKS))
-        completed = len(successful) == len(OPERATIONS)
+        recovery = self._recorded_recovery(budget)
+        course_recovery = self._recorded_course_recovery(budget)
+        required_operations = OPERATIONS[1:] if recovery else OPERATIONS
+        completed = not course_recovery and all(operation in successful for operation in required_operations)
+        course_completed = all(operation in successful for operation in COURSE_OPERATIONS)
         report = {'synthetic_only': True, 'model_requested': LLM_MODEL, 'effort_requested': MODEL_EFFORT,
                   'maximum_application_jobs': MAX_JOBS, 'reserved_jobs': len(rows),
                   'submitted_jobs': sum(row['job_id'] is not None for row in rows),
                   'cli_internal_attempts': 'unknown', 'server_inference_count': 'unknown',
                   'operations': [{key: row[key] for key in ('operation', 'attempt', 'status', 'job_id', 'error_code', 'retry_evidence')} for row in rows],
-                  'technical_flow_completed': completed, 'partial_wrong_grading': partial,
+                  'technical_flow_completed': bool(completed), 'course_flow_completed': course_completed,
+                  'partial_wrong_grading': partial,
+                  'explicit_probe_succeeded': 'probe' in successful,
+                  'structured_response_check': {'operation': 'answer' if recovery else 'probe',
+                                                 'succeeded': ('answer' if recovery else 'probe') in successful},
+                  'structured_check_recovery': recovery,
+                  'course_only_recovery': course_recovery,
+                  'course_structured_response_check': {'operation': 'curriculum', 'succeeded': 'curriculum' in successful},
+                  'rag_answer_succeeded': 'answer' in successful,
+                  'unverified_learning_operations': [op for op in OPERATIONS[1:] if op not in successful],
+                  'failed_answer_reclassified': False,
+                  'failed_probes_reclassified': False,
                   'educational_quality': 'accepted_by_manual_evidence' if completed and quality_accepted and partial and partial['reduced_score_observed'] else 'manual_review_required',
                   'review_result_digest': result_digest,
                   'schema_success_is_not_educational_quality': True, 'generated_at': now_iso()}
@@ -505,12 +669,20 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument('--run', action='store_true')
     parser.add_argument('--confirm-live', action='store_true', help='Allow up to eight additional application jobs; consumes account usage')
     parser.add_argument('--retry-operation', choices=OPERATIONS)
-    parser.add_argument('--retry-evidence', help='Specific verified cause/fix justifying the single reserve job')
+    parser.add_argument('--retry-evidence', help='Specific verified cause/fix for an explicit retry within the eight-job cap')
+    parser.add_argument('--structured-check-with-answer', action='store_true',
+                        help='Explicitly combine the structured response check with RAG after the two audited warning failures')
+    parser.add_argument('--course-only-after-answer-failure', action='store_true',
+                        help='Explicitly verify only five course operations after the recorded failed RAG schema request; full flow remains incomplete')
+    parser.add_argument('--recovery-evidence', help='Specific verified cause/fix for the explicitly selected recovery mode')
     args = parser.parse_args(argv)
     harness = LiveHarness(Path(__file__).resolve().parents[1])
     try:
         result = harness.check() if args.check_only else harness.run(confirm_live=args.confirm_live,
-                    retry_operation=args.retry_operation, retry_evidence=args.retry_evidence)
+                    retry_operation=args.retry_operation, retry_evidence=args.retry_evidence,
+                    structured_check_with_answer=args.structured_check_with_answer,
+                    recovery_evidence=args.recovery_evidence,
+                    course_only_after_answer_failure=args.course_only_after_answer_failure)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (HarnessHalted, ValueError, RuntimeError, OSError) as exc:

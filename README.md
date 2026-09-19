@@ -2,7 +2,11 @@
 
 PDF教材から学ぶローカルStreamlitアプリです。Dashboard / RAG / Feynman Drill / Curriculum / Libraryの5画面を維持し、生成を共通の公式Codex CLI Providerへ、教材EmbeddingをローカルE5へ移しました。OpenAI SDK、Chat Completions / Responses / Embedding APIの直接呼出し、APIキー設定UIはありません。
 
-**2026-09-19の第2段階では、専用Codex CLI 0.155.1の導入と実行境界の確認まで完了し、専用homeへの本人のChatGPTログインが未完了です。** 指定モデル`gpt-6-astra`と`medium`は新CLIの一覧に掲載され、実効設定の境界確認も通過しています。現在の診断の停止理由は`auth_required`だけです。実生成は**0回**で、文章品質・実学習E2Eはまだ確認していません。ローカル検索、書庫、履歴、Dashboardは利用できます。別モデルやAPIへのfallbackはありません。詳細は[実行境界](docs/CODEX_BOUNDARY.md)、[専用CLI監査](docs/PHASE2_CLI_AUDIT.md)、[検証報告](docs/TEST_REPORT.md)を参照してください。
+学習ゴール、前提知識、学び方（体系的・例題中心・実践・試験対策）、たとえに使う分野、1回の学習時間を保存できます。PDFを登録してコースを作り、講義 → 内容相談 → テスト → 弱点の復習へ進みます。作成済みコースは当時の設定を保持し、答案の下書きや相談履歴から再開できます。
+
+**2026-09-19: 専用Codex CLI 0.155.1への本人の公式ChatGPTログインが完了しています。** `gpt-6-astra / medium` の正式catalog掲載と実効設定・実行境界を確認しています。合成教材でカリキュラム・講義・対話・問題・採点の5操作が実生成に成功しました。失敗3件を含む検証上限8ジョブに達したため追加生成は終了し、単独の内容相談の実生成は未検証です。内容点検と制約は[最新の検証報告](docs/TEST_REPORT.md)を参照してください。別モデル・別effort・APIへのfallback、Resetの自動消費はありません。
+
+最初に「教材ライブラリ」でPDFを追加し、「あなたの学び方を設定」を保存します。「この教材で学ぶ」からコースを作成すると、ホームの「続きから学ぶ」で再開できます。相談の「要点をつかむ」は代表的なページを参照し、具体的な質問では該当箇所を検索します。長いPDFの全ページ・全概念を一度に網羅する保証はなく、参照範囲と根拠ページを確認できます。
 
 ## セットアップ
 
@@ -106,11 +110,11 @@ uv run --frozen --extra semantic python main.py --subject Example/Study-Basics -
 
 ## 学習と保存
 
-- Dashboard: EXP、称号、日次目標、ストリーク、学習ヒートマップ、科目別バランス、復習予定、ポモドーロ。
-- RAG: 生成なしのローカル検索、教材根拠を示す回答、出題傾向分析、科目・学習セッション別の会話履歴。
-- Feynman Drill: Easy/Normal/Hard、構造化設問・配点・採点基準・模範解答、弱点復習。模範解答は採点後だけ表示。
-- Curriculum: 5/10/15章、必要な章だけ講義生成、再生成、ソクラテス対話、章試験、章完了とEXP、保存講義のMarkdown出力。
-- Library: PDF登録と一覧、ローカル索引作成・更新、モデル未取得/OCR/破損の診断。
+- Dashboard（今日の学び）: コースの続き・PDF追加・復習への入口、EXP、称号、日次目標、ストリーク、学習ヒートマップ、科目別バランス、復習予定、ポモドーロ。
+- RAG（内容を相談）: 科目別の学習設定・質問下書き、代表抜粋を使った概要相談、生成なしのローカル検索、教材根拠を示す回答、出題傾向分析、科目・学習セッション別の会話履歴。
+- Feynman Drill（テスト・復習）: 答案の下書き復元・過去答案の保持、Easy/Normal/Hard、構造化設問・配点・採点基準・模範解答、弱点復習。模範解答は採点後だけ表示。
+- Curriculum（コース・授業）: コースの学び方を固定、ロードマップ、5/10/15章、必要な章だけ講義生成、再生成、ソクラテス対話、章試験、章完了とEXP、保存講義のMarkdown出力。
+- Library（教材ライブラリ）: 複数PDFの登録からコース作成への導線、PDF登録と一覧、ローカル索引作成・更新、モデル未取得/OCR/破損の診断。
 
 Easy=70、Normal=80、Hard=90点を維持。問題の配点合計、設問ID、得点範囲、根拠IDをアプリ側で検証し、合計と合否は決定的に計算します。失敗した採点を0点・不合格へ変換しません。初心者/専門家、回答長、チューター、数式・導出、難易度の設定を共通プロンプトへ渡します。
 
@@ -136,7 +140,7 @@ STUDY_TEST_LOCAL_EMBEDDING=1 uv run --frozen --extra semantic pytest tests/test_
 STUDY_RUN_CODEX_BOUNDARY_PROBE=1 uv run --frozen pytest tests/test_provider.py -q
 ```
 
-本人の専用ログインが完了した後の合成教材による実確認には、専用harnessを使用します。現在は未実行です。
+合成教材での実確認には専用harnessを使用します。過去の実行と残り予算は永続ledgerで保持され、削除・初期化して再実行しません。実施済み結果は[検証報告](docs/TEST_REPORT.md)に記録しています。
 
 ```sh
 # 認証・モデル・境界の確認だけ。生成ジョブは0件。
@@ -146,8 +150,8 @@ uv run --frozen python scripts/live_e2e.py --check-only
 uv run --frozen --extra semantic python scripts/live_e2e.py --run --confirm-live
 ```
 
-harnessは`.study-runtime/phase2-live`内の合成PDF・答案・DBだけを使用し、本人の教材・進捗には触れません。最小probe、RAG回答、5章curriculum、1章の講義、対話、問題生成、部分誤答の採点の7ジョブを順に実行します。永続ledgerで初回・再開・失敗を通算し、明示再実行の予備1件を含め**累計8ジョブ**が上限です。完了済みの結果を再表示しても生成・進捗加算は繰り返しません。利用枠エラーや認証切れは成功として進めません。
+harnessは`.study-runtime/phase2-live`内の合成PDF・答案・DBだけを使用し、本人の教材・進捗には触れません。最小probe、RAG回答、5章curriculum、1章の講義、対話、問題生成、部分誤答の採点の7ジョブを順に実行します。永続ledgerで初回・再開・失敗を通算し、失敗した要求も含め**累計8ジョブ**が上限です。通常は7段階を別要求で実施します。今回の実測はprobe失敗2件と回答のSchema拒否1件の後、修正根拠・正常catalog・保存証拠を照合する明示modeで、残り5件のコース部分を完了しました。失敗probe/回答は失敗のまま残し、`course_flow_completed=true`と`technical_flow_completed=false`を区別しています。このcheckoutの検証枠は使用済みで、ledgerを削除して追加生成を行いません。完了済みの結果を再表示しても生成・進捗加算は繰り返しません。利用枠エラーや認証切れは成功として進めません。
 
-結果は同ディレクトリの`report.json`と`results/`に保存します。`manual-review-template.json`に沿って教材・引用ページ・講義・対話・設問・部分誤答の減点理由・進捗復旧を確認し、具体的な照合根拠を`manual-review.json`へ記録します。構造化JSONの成功だけでは学習品質を合格にせず、現在の品質確認は未実施です。CLI内部の実送信回数・サーバー推論回数は観測できず、レポートでも不明とします。
+結果は同ディレクトリの`report.json`と`results/`に保存します。`manual-review-template.json`に沿って教材・引用ページ・講義・対話・設問・部分誤答の減点理由・進捗復旧を確認し、具体的な照合根拠を`manual-review.json`へ記録します。構造化JSONの成功だけでは学習品質を合格にしません。レビュー済みの範囲と未検証事項は検証報告に記載します。CLI内部の実送信回数・サーバー推論回数は観測できず、レポートでも不明とします。
 
 [機能対応表](docs/FEATURE_INVENTORY.md)、[設計](docs/ARCHITECTURE.md)、[テスト報告](docs/TEST_REPORT.md)、[再開用状態](docs/PROJECT_STATE.md)に確認済み範囲と制約を記録しています。公開CI用の実Codex生成は追加していません。

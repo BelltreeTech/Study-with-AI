@@ -1,68 +1,63 @@
 # 再開用状態
 
-確認日: 2026-09-19、macOS arm64 / Python 3.12.13。
+確認日: 2026-09-19、macOS arm64 / Python 3.12.13 / Streamlit 1.54.0。
 
-## ソースと作業場所
+## 作業場所と履歴
 
-- origin: `https://github.com/BelltreeTech/Study-with-AI`
+- 正規checkout: `/Users/shinrisuzuki/Developer/projects/Study-with-AI`
+- origin: `git@github.com:BelltreeTech/Study-with-AI.git`
 - branch: `feat/codex-gpt6-medium-refactor`
-- 第1段階の開始SHA: `8cee252b629138ba5ce2cca677ba3cc3a0b987dc`
-- 第2段階の開始SHA（第1段階完了commit）: `ceaaf865cdbaefc125561ca21f14eaa0ef850c98`
-- 正規作業場所: `~/Developer/projects/Study-with-AI`
-- `~/Developer` の分類を確認し、継続アプリ用 `projects/` を使用。同じoriginの既存cloneは見つからなかった。ユーザー表記 `~/Devepoler` は存在しなかった。
-- mainへの直接変更、push、merge、履歴書換えは行っていない。終了SHAは自己参照する値を文書へ埋め込まず、`git log -1 --format="%H %s"` と完了報告で確認する。
+- main: `8cee252b629138ba5ce2cca677ba3cc3a0b987dc`（変更なし）
+- 第1段階完了: `ceaaf865cdbaefc125561ca21f14eaa0ef850c98`
+- 第2段階完了・今回の開始HEAD: `1a6aaafabf18aa82c3efe917851a5150627807c0`
+- 今回の終了SHAは自己参照を避け、`git log -1 --format="%H %s"`と完了報告で確認する。
 
-## 完了した実装
+同じcheckoutとブランチを維持した。再clone、SQLite再移行、main変更、push、merge、履歴書換えはしていない。最初の配置確認では`~/Developer`の`projects/`分類を採用し、`~/Devepoler`は存在しなかった。本人の教材・成績・進捗・会話は検証に使っていない。旧進捗の元JSON、以前のbackup、SQLite移行記録は保持している。[MIGRATION](MIGRATION.md)参照。
 
-Streamlitの5画面、共通Service、公式Codex CLI Provider、型付き出力/採点、ローカルE5/BM25、PDF/OCR、永続ジョブ、キャンセル/timeout/利用枠エラー、科目/セッション/講義単位の履歴、SQLite進捗移行を実装した。詳細は[機能対応表](FEATURE_INVENTORY.md)と[設計](ARCHITECTURE.md)。APIキー入力とOpenAI SDK/直接生成/Embedding API経路は除去した。
+## 学習体験の現在地
 
-既存進捗はGit外へbackupした上で、元JSONを保持してSQLiteへ本移行した。全値一致と元JSONの不変を確認した。追跡解除はindexからだけ行い、作業ツリーの個人ファイルとGitの過去履歴を保持している。テストは合成データ専用である。
+5画面は「今日の学び」「内容を相談」「テスト・復習」「コース・授業」「教材ライブラリ」の表示名で維持する。PDF登録からコース作成へ、ホームから続きの章・復習へ進む導線を追加した。目標、前提知識、学び方、たとえ、15/25/45/60分の学習単位を科目別に保存し、新コースへ固定する。例題→ヒント付き練習→自力確認と、誤解・たとえの限界・復習を共通の生成方針に組み込んだ。
 
-取得済みローカルE5モデル、合成PDF、テストruntimeはignoredディレクトリ内にある。本人の教材をモデル評価に使っていない。サンプル生成script、モデル取得script、lockfileをcommit対象に含めた。
+質問と答案の下書き、以前の答案、科目・学習セッション別の履歴を復元できる。試験の切替は別タブの新しい結果を消さないatomicな操作とした。生成は明示操作で開始し、完了は2秒間隔のfragmentで自動反映する。結果receiptと進捗eventにより生成・加点を繰り返さない。
 
-## 第2段階で追加した実装と現在の停止理由
+カリキュラムと明示的な概要相談ではPDF間・ページ間に分散した代表抜粋を使う。長い保存講義は本文・一般的補足の原文を保持し、相談・出題には両fieldから冒頭・末尾・関連・分散した節を選んだ合計6000字以内のcontextを送る。補足は教材根拠に昇格させず、新しい会話では補足の問いも次ターンへ引き継ぐ。全ページ・全概念の網羅は保証せず、範囲metadataを表示する。検索・EmbeddingはローカルE5/BM25で、通常操作によるモデル取得や商用Embedding APIはない。
 
-公式Codex CLI **0.155.1**を `~/.local/share/study-with-ai/tools/codex/0.155.1/vendor/aarch64-apple-darwin/bin/codex` へ並行導入した。公式npm配布の固定integrityとbinary hashを確認した。共有CLIは0.152.1のまま、Homebrew・Codexアプリ・PATH・共有設定を変更していない。再現用installerは `scripts/setup_codex.py`。
+詳細は[設計](ARCHITECTURE.md)、[機能対応表](FEATURE_INVENTORY.md)、[検索](LOCAL_RETRIEVAL.md)。新しいUIフレームワーク、外部SaaS、MCP生成基盤は追加していない。
 
-専用 `~/.local/share/study-with-ai/codex-home` を本人所有・0700・所有記録付きで準備した。同じhomeと `cli_auth_credentials_store="file"` / `forced_login_method="chatgpt"` を公式CLIのログイン、状態確認、モデル一覧、生成に指定する。共有authの読取り・コピー・logoutは行っていない。本人のブラウザログインはまだ完了していない。
+## Codexと旧停止理由
 
-実機診断の最新状態は **`model_status: listed`、`boundary_verified: true`、停止理由 `auth_required` のみ**。新CLIの `gpt-6-astra` / `medium` 掲載、実効設定と強制要件の読み取り専用検査、合成localhost probeの空tool catalogとsentinel隔離を確認した。モデル一覧の掲載は本人の利用資格や実生成成功の証明ではない。第1・第2段階とも実生成は **0回**。
+専用公式CLIは **0.155.1**、実行ファイルは `~/.local/share/study-with-ai/tools/codex/0.155.1/vendor/aarch64-apple-darwin/bin/codex`。専用homeは `~/.local/share/study-with-ai/codex-home`、本人所有0700・file auth store。本人が公式ブラウザログインを完了した。実測診断は `auth=chatgpt` / `model_status=listed` / `model_available=true` / `boundary_verified=true` / `ready=true`、指定値は **gpt-6-astra / medium**。service tierは既定値。モデル一覧、要求設定、実生成、サービス側のモデル同一性の証明は区別する。
 
-第1段階の「旧catalog未掲載」「共有global AGENTS混入」「内部retryを0にできない」という3停止理由は、その当時の記録として [CODEX_BOUNDARY.md](CODEX_BOUNDARY.md) に保持した。第2段階では専用homeで共有設定から分離し、ユーザー指示に従って有限内部retryを許容する。アプリ自動再試行0回、無制限接続retry=false、deadline/cancel/出力上限/排他は維持する。サービス側の実推論数・利用枠消費数は不明で、1ジョブ1回とは説明しない。利用上限に達してもResetクレジットを自動消費しない（本人の追加指示）。
+旧3停止理由は、①新版の正式catalogで掲載確認、②専用homeの公式独立ログインと隔離試験、③有限内部retryを許容する仕様と総timeout/cancelの維持、により対応した。旧版の失敗は[実行境界](CODEX_BOUNDARY.md)と[検証報告](TEST_REPORT.md)に履歴として残す。
 
-公式app-serverの `config/read` / `configRequirements/read` / `model/list` は生成前の診断に限る。生成は引き続き `codex exec`。MCP基盤や別UIフレームワークは追加していない。管理者/組織の強制設定は保持し、両立性を確認できなければ停止する。認証後も実効設定を再検査する。
+第3段階で見つかったCLI警告の誤判定と送信Schema互換性を修正した。正確なCode Mode停止警告だけを許容し、hostやtoolsを有効にしない。送信用Schemaのコピーを対応subsetにし、返ったJSONは元の厳密なSchemaと業務規則に照合する。モデル・effort・APIへのfallbackはない。アプリ自動再生成0、CLIの無制限retry=false、180秒timeout、同時1ジョブ、process group停止を維持する。
 
-合成専用 `scripts/live_e2e.py` を追加した。probe→回答→5章curriculum→1章の講義→対話→問題→部分誤答の採点という7ジョブを、永続ledgerで累計8ジョブ以内に制限する。本人の教材・進捗を使わず、再開時の生成重複と進捗二重加算を防ぐ。実行制御のmock試験と、実モデルの内容品質確認は区別する。現時点で実E2E・手動品質レビューは未実施。
+## 検証結果と実生成の保存先
 
-## 本人ログイン後の再開手順
+最新の件数・成功した操作・失敗履歴・品質点検・未検証事項は[TEST_REPORT](TEST_REPORT.md)を正本とする。通常suiteは合成PDF/fake CLI/Providerのみ。実CLI境界probeはlocalhostのみ、実E5は通信禁止下で実施し、実Codex要求と分けて報告する。
+
+実生成harnessは `.study-runtime/phase2-live` の合成教材・専用DB・永続ledgerを使う。過去の失敗も予算に含め、累計8ジョブを超えない。既知の2probe失敗と1回答のSchema拒否を成功に書き換えず、残る5件でコース部分を優先して検証する明示modeを設けた。完全な7段階の技術完了と、コース部分の完了は別指標。実測は5件のコース操作すべて成功、84点で合格・章完了・50EXP。NoCalls Providerで再開し、生成0・加点0・8ジョブ不変を確認した。累計8件の検証枠は使用済みなので追加生成しない。直接RAG回答と最小probeの実検証は未完了のまま。実内容の7項目を照合したが、総合品質指標は未検証項目を含むため未承認とする。
+
+`report.json`、`results/`、構造だけの `execution/`、`manual-review.json`はignored領域にある。認証・実行ログ本文・本人データ・binary・モデルをGitへ含めない。ledgerを消して予算を復活させない。完了結果の再表示/復元は新しい生成を行わない。
+
+## 起動・診断・停止
 
 ```sh
 cd ~/Developer/projects/Study-with-AI
-uv run --frozen python scripts/setup_codex.py
-uv run --frozen python scripts/codex_runtime.py --setup-home
-uv run --frozen python scripts/codex_runtime.py --login-command
-# 表示されたコマンドを本人が実行し、公式ブラウザログインを完了する。
 uv run --frozen python scripts/codex_runtime.py --diagnose
-uv run --frozen python scripts/live_e2e.py --check-only
-# 診断通過後の明示的な実生成。本人の利用枠を消費する。
-uv run --frozen --extra semantic python scripts/live_e2e.py --run --confirm-live
+uv run --frozen --extra semantic streamlit run app.py --server.address 127.0.0.1
 ```
 
-専用CLIとhomeが既に正常ならsetupはその検証になる。`--login-command`はコマンド表示だけで、認証済みなら再ログインを要求しない。診断と `--check-only` は生成ジョブを開始しない。`auth_required`が残れば実行を続けない。
+ブラウザは `http://127.0.0.1:8501`。本人のログインは完了済みなので再ログイン不要。失効時だけ `uv run --frozen python scripts/codex_runtime.py --login-command` で専用homeの公式手順を表示し、本人がログインする。共有authをコピーしない。
 
-harnessのledger・合成教材・結果・進捗は `.study-runtime/phase2-live` に保存する。実生成後は `report.json` と `manual-review-template.json` を確認し、引用ページ・教材との整合・対話・出題・減点理由・再開を根拠付きでレビューして `manual-review.json` に記録する。JSONが正しいだけで品質を合格にしない。失敗の自動再試行はなく、必要な再実行は原因と修正根拠を明示し、永続予算の残り1件の範囲で行う。
+停止は起動ターミナルで **Ctrl+C**。画面のキャンセルは対象ジョブだけ、「生成ジョブを停止して保存」はアプリ所有ジョブを停止する。他のCodexプロセスを一括停止しない。検証用8517/8531のサーバーと作成したブラウザタブは回収済み。両portのlistenerなしを確認した。
 
-## 検証と再開
+APIキーなしの合成デモとローカル検索コマンドは[README](../README.md)。通常テストは `.venv/bin/python -m pytest -q`、静的検証は `.venv/bin/ruff check .`、`.venv/bin/mypy src app.py main.py scripts`。再開時はGit差分とCLI版を確認し、変わっていない失敗調査を繰り返さない。
 
-[TEST_REPORT.md](TEST_REPORT.md)が実行コマンド・pass/skip・制約の正本。再開時は `git status --short` と差分、CLI版、lockfile、関連sourceの変更有無を先に確認する。同じ版で済んだ調査を無理由に繰り返さない。新しいCLIや依存を導入した場合は境界・model・cache契約が変わるため再検証する。
+## 残る制約
 
-通常の起動/停止と分離したデモは[README](../README.md)、バックアップ/rollbackは[MIGRATION](MIGRATION.md)。第1段階のブラウザsmokeは合成用ポート8517で実施し、Ctrl+Cで正常終了させた。第2段階の最新検証はTEST_REPORTの記録を参照する。日常利用のサーバーは起動したままにしていない。
-
-## 未検証・未対応
-
-- 専用homeでの本人のChatGPTログイン、実GPT-6生成、実学習E2E、回答/講義/対話/出題/採点の内容品質、実アカウントの利用枠超過。
-- CLI内部の実送信回数とサービス側の推論回数。レポートは不明とし、アプリジョブ数と混同しない。
-- 大規模・本人教材の検索品質、実画像PDFのOCR精度。実E5評価は小さな合成4問のみ。
-- Linuxは未検証。WindowsはPOSIX flock/process group/dirfdのため未対応。
-- 任意の複雑なMermaid図は描画せずcode表示。SQLiteから旧JSONへの自動逆移行は未実装。
-- 別stateディレクトリのアプリ間で同時生成数を共有しない。資料ファイルとSQLiteを跨ぐ完全なtransactionはなく、最後の版チェック直後に外部編集される小さな競合余地がある。
+- 実確認は小さな合成教材に限定。大規模PDF、本人教材、画像PDFのOCR精度、教育効果の長期評価は未検証。
+- 選択抜粋は全ページ・全講義を網羅しない。BM25では教材と言語・語彙が違う質問に弱い。会話などを含む最終promptは64KiBを超えると拒否する。
+- CLI内部HTTP試行数・サービス側推論数・利用枠消費量は不明。キャンセルがサーバー側処理の無消費を保証するわけではない。Resetを自動消費しない。
+- Linux未検証、WindowsはPOSIX lock/process groupのため未対応。専用installerはmacOS arm64用。
+- 複雑なMermaidはコード表示。SQLiteから旧JSONへの自動逆移行なし。別state保存先間で生成枠は共有しない。資料とDBを跨ぐ完全transactionはない。

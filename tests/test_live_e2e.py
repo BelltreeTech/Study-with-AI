@@ -24,12 +24,15 @@ class Phase2Fake(FakeProvider):
         self.probes = 0
         self.checked = 0
         self.probed_runtime = False
+        self.catalog_listed = True
 
     def diagnostics(self):
         self.checked += 1
         return {'executable': '/synthetic/official-codex', 'version': 'test-only',
                 'codex_home': '/synthetic/private-codex-home', 'model': 'gpt-6-astra', 'effort': 'medium',
                 'auth': self.auth, 'boundary_verified': True, 'ready': self.auth == 'chatgpt' and self.ready,
+                'model_status': 'listed' if self.catalog_listed else 'not_listed',
+                'model_available': self.catalog_listed,
                 'probe_ready': self.auth == 'chatgpt'}
 
     def probe_model(self, prompt, schema, cancel_event=None):
@@ -238,3 +241,268 @@ def test_missing_ledger_never_resets_existing_budget(harness):
     assert failure.value.code == 'ledger_missing'
     assert not harness.workspace.ledger_path.exists()
     assert harness.provider.probes == 0
+
+
+RECOVERY_EVIDENCE = 'The two warning event hashes match official source; the exact disabled code-mode notice is now handled without enabling tools.'
+
+
+def seed_known_warning_failures(harness):
+    """Synthetic structural evidence only; neither old probe is made successful."""
+    with harness.workspace.lock():
+        budget = Budget(harness.workspace.ledger_path)
+        budget.bind_runtime(harness.provider.diagnostics())
+        for attempt in (1, 2):
+            request = {'request_id': f'failed-probe-{attempt}', 'kind': 'probe',
+                       'model': 'gpt-6-astra', 'effort': 'medium', 'schema': live_e2e.PROBE_SCHEMA}
+            row = budget.reserve('probe', request, evidence=RECOVERY_EVIDENCE if attempt == 2 else None)
+            budget.update(row, status='failed', error_code='process_error', job_id=f'synthetic-failed-{attempt}')
+        metadata = {'stage': 'parse', 'error_code': 'process_error', 'returncode': 0,
+                    'stdout_bytes': 945, 'stderr_bytes': 0,
+                    'stderr_sha256': live_e2e.hashlib.sha256(b'').hexdigest(),
+                    'events': live_e2e.RECOVERY_EVENTS, 'notices': live_e2e.RECOVERY_NOTICES,
+                    'signatures': ['feature_warning']}
+        atomic_json(harness.workspace.root / 'execution/probe-2.json', metadata)
+    return metadata
+
+
+def test_explicit_answer_check_finishes_six_operations_within_eight_total_and_restores(harness):
+    seed_known_warning_failures(harness)
+    result = harness.run(confirm_live=True, structured_check_with_answer=True,
+                         recovery_evidence=RECOVERY_EVIDENCE)
+    assert result['reserved_jobs'] == 8 and result['submitted_jobs'] == 8
+    assert result['technical_flow_completed'] and result['chapter_completed']
+    assert result['explicit_probe_succeeded'] is False
+    assert result['structured_response_check'] == {'operation': 'answer', 'succeeded': True}
+    assert result['failed_probes_reclassified'] is False
+    assert result['structured_check_recovery']['evidence'] == RECOVERY_EVIDENCE
+    probes = [row for row in Budget(harness.workspace.ledger_path).rows() if row['operation'] == 'probe']
+    assert [row['status'] for row in probes] == ['failed', 'failed']
+    assert harness.provider.probes == 0 and len(harness.provider.calls) == 6
+    assert result['synthetic_total_exp'] == 50
+    restarted_provider = Phase2Fake(auth='unavailable')
+    restarted = LiveHarness(harness.workspace.project_root, restarted_provider)
+    again = restarted.run(confirm_live=True)
+    assert again['technical_flow_completed'] and again['reserved_jobs'] == 8
+    assert again['synthetic_total_exp'] == 50
+    assert restarted_provider.checked == restarted_provider.probes == 0
+    assert restarted_provider.calls == []
+
+
+def test_combined_check_cannot_be_implicit_or_have_missing_evidence(harness):
+    seed_known_warning_failures(harness)
+    with pytest.raises(HarnessHalted) as implicit:
+        harness.run(confirm_live=True)
+    assert implicit.value.code == 'prior_failure'
+    with pytest.raises(HarnessHalted) as missing:
+        harness.run(confirm_live=True, structured_check_with_answer=True)
+    assert missing.value.code == 'recovery_evidence_required'
+    assert len(Budget(harness.workspace.ledger_path).rows()) == 2
+    assert harness.provider.probes == 0 and harness.provider.calls == []
+
+
+@pytest.mark.parametrize('tamper', ['returncode', 'tool', 'notice', 'completion', 'final', 'unknown_event', 'stderr'])
+def test_combined_check_requires_exact_known_warning_evidence(harness, tamper):
+    metadata = seed_known_warning_failures(harness)
+    # Independent deep copy: constants describe the audited incident, never a mutable fixture.
+    metadata = json.loads(json.dumps(metadata))
+    if tamper == 'returncode':
+        metadata['returncode'] = 1
+    elif tamper == 'tool':
+        metadata['events']['item:command_execution'] = 1
+    elif tamper == 'notice':
+        metadata['notices'][1]['sha256'] = '0' * 64
+    elif tamper == 'completion':
+        metadata['events'].pop('turn.completed')
+    elif tamper == 'final':
+        metadata['events']['item:agent_message'] = 0
+    elif tamper == 'unknown_event':
+        metadata['events']['unknown_event'] = 1
+    else:
+        metadata['stderr_bytes'] = 1
+    atomic_json(harness.workspace.root / 'execution/probe-2.json', metadata)
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, structured_check_with_answer=True,
+                    recovery_evidence=RECOVERY_EVIDENCE)
+    assert failure.value.code == 'recovery_proof_required'
+    assert len(Budget(harness.workspace.ledger_path).rows()) == 2
+    assert harness.provider.probes == 0 and harness.provider.calls == []
+
+
+@pytest.mark.parametrize('ready,listed', [(False, True), (True, False)])
+def test_combined_check_requires_normal_ready_and_catalog_listing(harness, ready, listed):
+    seed_known_warning_failures(harness)
+    harness.provider.ready = ready
+    harness.provider.catalog_listed = listed
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, structured_check_with_answer=True,
+                    recovery_evidence=RECOVERY_EVIDENCE)
+    assert failure.value.code == 'recovery_catalog_required'
+    assert harness.provider.probes == 0 and harness.provider.calls == []
+
+
+def test_combined_check_failed_answer_is_not_a_structured_success_or_auto_retry(harness, monkeypatch):
+    seed_known_warning_failures(harness)
+    calls = []
+    def fail(*args):
+        calls.append('answer')
+        raise ProviderError('rate_limited', 'Synthetic quota rejection')
+    monkeypatch.setattr(harness.provider, 'generate', fail)
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, structured_check_with_answer=True,
+                    recovery_evidence=RECOVERY_EVIDENCE)
+    assert failure.value.code == 'rate_limited' and calls == ['answer']
+    report = json.loads((harness.workspace.root / 'report.json').read_text())
+    assert report['reserved_jobs'] == 3 and not report['technical_flow_completed']
+    assert report['structured_response_check'] == {'operation': 'answer', 'succeeded': False}
+    assert report['explicit_probe_succeeded'] is False
+    with pytest.raises(HarnessHalted) as no_implicit_resume:
+        harness.run(confirm_live=True)
+    assert no_implicit_resume.value.code == 'recovery_opt_in_required'
+    with pytest.raises(HarnessHalted) as no_auto_retry:
+        harness.run(confirm_live=True, structured_check_with_answer=True,
+                    recovery_evidence=RECOVERY_EVIDENCE)
+    assert no_auto_retry.value.code == 'prior_failure' and calls == ['answer']
+
+
+COURSE_RECOVERY_EVIDENCE = (
+    'The recorded request was rejected with invalid_schema; uniqueItems is removed from the wire schema only, '
+    'and the full original local validation remains covered by synthetic regressions.'
+)
+
+
+def seed_known_schema_failure(harness, monkeypatch):
+    """Reproduce only the ledger and safe metadata, never any real CLI request."""
+    seed_known_warning_failures(harness)
+    def fail(*args):
+        raise ProviderError('process_error', 'Synthetic schema rejection, matching the historical classification.')
+    with monkeypatch.context() as patch:
+        patch.setattr(harness.provider, 'generate', fail)
+        with pytest.raises(HarnessHalted, match='answer'):
+            harness.run(confirm_live=True, structured_check_with_answer=True, recovery_evidence=RECOVERY_EVIDENCE)
+    metadata = {
+        'stage': 'parse', 'returncode': 1, 'stdout_bytes': 1458, 'stderr_bytes': 0,
+        'stderr_sha256': live_e2e.hashlib.sha256(b'').hexdigest(),
+        'events': {'thread.started': 1, 'item.completed': 2, 'item:error': 2, 'turn.started': 1,
+                   'error': 1, 'turn.failed': 1},
+        'notices': json.loads(json.dumps(live_e2e.RECOVERY_NOTICES)) + [
+            {'bytes': 376, 'sha256': '4a4236d883a7d15ea127aef25e7291ce623b2701394b22609b2846bc22fa5210'},
+            {'bytes': 393, 'sha256': 'f957c207fc701f69a14bc7b031d11d44b95a7e5b06bda428f17721ac2b321200'},
+        ],
+        'signatures': ['invalid_schema', 'feature_warning', 'bad_request'], 'error_code': 'process_error',
+    }
+    atomic_json(harness.workspace.root / 'execution/answer-1.json', metadata)
+    return metadata
+
+
+def test_explicit_course_only_completes_five_jobs_but_never_reports_full_success(harness, monkeypatch):
+    seed_known_schema_failure(harness, monkeypatch)
+    before = Budget(harness.workspace.ledger_path).rows()
+    result = harness.run(confirm_live=True, course_only_after_answer_failure=True,
+                         recovery_evidence=COURSE_RECOVERY_EVIDENCE)
+    assert result['reserved_jobs'] == result['submitted_jobs'] == 8
+    assert result['technical_flow_completed'] is False
+    assert result['course_flow_completed'] and result['chapter_completed']
+    assert result['rag_answer_succeeded'] is False and result['explicit_probe_succeeded'] is False
+    assert result['structured_response_check'] == {'operation': 'answer', 'succeeded': False}
+    assert result['course_structured_response_check'] == {'operation': 'curriculum', 'succeeded': True}
+    assert result['unverified_learning_operations'] == ['answer']
+    assert result['failed_probes_reclassified'] is result['failed_answer_reclassified'] is False
+    assert result['course_only_recovery']['evidence'] == COURSE_RECOVERY_EVIDENCE
+    assert result['educational_quality'] == 'manual_review_required'
+    assert harness.provider.probes == 0 and len(harness.provider.calls) == 5
+    assert result['synthetic_total_exp'] == 50 and result['partial_wrong_grading']['total'] == 84
+    assert Budget(harness.workspace.ledger_path).rows()[:3] == before
+
+    restarted_provider = Phase2Fake(auth='unavailable')
+    restarted = LiveHarness(harness.workspace.project_root, restarted_provider)
+    again = restarted.run(confirm_live=True)
+    assert again['technical_flow_completed'] is False and again['course_flow_completed']
+    assert again['reserved_jobs'] == 8 and again['synthetic_total_exp'] == 50
+    assert restarted_provider.checked == restarted_provider.probes == 0 and restarted_provider.calls == []
+    with sqlite3.connect(harness.workspace.state / 'progress.sqlite3') as db:
+        state = json.loads(db.execute('SELECT document FROM progress_state').fetchone()[0])
+    course = state['courses'][live_e2e.COURSE]
+    assert len(course['grade_history']) == 1
+    curriculum = json.loads(Budget(harness.workspace.ledger_path).latest('curriculum')['result'])
+    assert course['learning_options'] == curriculum['learning_options']
+    assert course['material_revision'] == curriculum['material_revision']
+    assert course['context_coverage'] == curriculum['context_coverage']
+
+
+@pytest.mark.parametrize('flags,code', [
+    ({}, 'recovery_opt_in_required'),
+    ({'course_only_after_answer_failure': True}, 'recovery_evidence_required'),
+    ({'course_only_after_answer_failure': True, 'structured_check_with_answer': True,
+      'recovery_evidence': COURSE_RECOVERY_EVIDENCE}, 'conflicting_recovery'),
+    ({'course_only_after_answer_failure': True, 'recovery_evidence': COURSE_RECOVERY_EVIDENCE,
+      'retry_operation': 'answer', 'retry_evidence': COURSE_RECOVERY_EVIDENCE}, 'conflicting_recovery'),
+])
+def test_course_only_requires_specific_opt_in_and_cannot_retry_answer(harness, monkeypatch, flags, code):
+    seed_known_schema_failure(harness, monkeypatch)
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, **flags)
+    assert failure.value.code == code
+    assert len(Budget(harness.workspace.ledger_path).rows()) == 3
+    assert harness.provider.probes == 0 and harness.provider.calls == []
+
+
+@pytest.mark.parametrize('tamper', ['returncode', 'signature', 'notice', 'tool', 'completion', 'missing'])
+def test_course_only_refuses_changed_schema_failure_evidence(harness, monkeypatch, tamper):
+    metadata = seed_known_schema_failure(harness, monkeypatch)
+    path = harness.workspace.root / 'execution/answer-1.json'
+    if tamper == 'missing':
+        path.unlink()
+    else:
+        if tamper == 'returncode':
+            metadata['returncode'] = 0
+        elif tamper == 'signature':
+            metadata['signatures'] = ['rate_limited']
+        elif tamper == 'notice':
+            metadata['notices'][-1]['sha256'] = '0' * 64
+        elif tamper == 'tool':
+            metadata['events']['item:command_execution'] = 1
+        else:
+            metadata['events']['turn.completed'] = 1
+        atomic_json(path, metadata)
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, course_only_after_answer_failure=True,
+                    recovery_evidence=COURSE_RECOVERY_EVIDENCE)
+    assert failure.value.code == 'course_recovery_proof_required'
+    assert len(Budget(harness.workspace.ledger_path).rows()) == 3 and harness.provider.calls == []
+
+
+@pytest.mark.parametrize('ready,listed', [(False, True), (True, False)])
+def test_course_only_still_requires_normal_ready_and_catalog(harness, monkeypatch, ready, listed):
+    seed_known_schema_failure(harness, monkeypatch)
+    harness.provider.ready, harness.provider.catalog_listed = ready, listed
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, course_only_after_answer_failure=True,
+                    recovery_evidence=COURSE_RECOVERY_EVIDENCE)
+    assert failure.value.code == 'recovery_catalog_required'
+    assert len(Budget(harness.workspace.ledger_path).rows()) == 3 and harness.provider.calls == []
+
+
+def test_course_only_stops_on_failure_without_implicit_or_explicit_extra_retry(harness, monkeypatch):
+    seed_known_schema_failure(harness, monkeypatch)
+    harness.provider.fail_operation = 'grade'
+    with pytest.raises(HarnessHalted) as failure:
+        harness.run(confirm_live=True, course_only_after_answer_failure=True,
+                    recovery_evidence=COURSE_RECOVERY_EVIDENCE)
+    assert failure.value.code == 'rate_limited'
+    report = json.loads((harness.workspace.root / 'report.json').read_text())
+    assert report['reserved_jobs'] == 8 and not report['course_flow_completed']
+    assert not report['technical_flow_completed'] and not report['chapter_completed']
+    assert len(harness.provider.calls) == 4
+    with pytest.raises(HarnessHalted) as implicit:
+        harness.run(confirm_live=True)
+    assert implicit.value.code == 'recovery_opt_in_required'
+    with pytest.raises(HarnessHalted) as repeated:
+        harness.run(confirm_live=True, course_only_after_answer_failure=True,
+                    recovery_evidence=COURSE_RECOVERY_EVIDENCE)
+    assert repeated.value.code == 'prior_failure'
+    with pytest.raises(HarnessHalted) as extra:
+        harness.run(confirm_live=True, course_only_after_answer_failure=True,
+                    recovery_evidence=COURSE_RECOVERY_EVIDENCE, retry_operation='grade',
+                    retry_evidence=COURSE_RECOVERY_EVIDENCE)
+    assert extra.value.code == 'conflicting_recovery'
+    assert len(Budget(harness.workspace.ledger_path).rows()) == 8 and len(harness.provider.calls) == 4
