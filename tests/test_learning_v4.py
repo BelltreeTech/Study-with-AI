@@ -361,3 +361,10 @@ def test_feedback_referencing_all_ten_sources_transmits_evidence_once():
     assert "sources" not in data["input"]["practice"]
     assert len(provider.calls[-1].encode()) <= 65536
     assert request.payload == saved and payload == original
+
+
+def test_section_detail_is_chapter_wide_and_keeps_derivation_code():
+    instruction = TASKS['lecture_section']
+    for phrase in ('章全体', '2500〜4000', '切捨て上限ではない', '途中式', 'コードと理論の対応', '一度だけ'):
+        assert phrase in instruction
+    assert '6〜8節' in TASKS['lecture_plan']

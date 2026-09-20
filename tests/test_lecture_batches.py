@@ -460,3 +460,21 @@ def test_schema_diagnostic_survives_batch_wrapping_and_checkpoint(env):
     assert result['diagnostic']['stage'] == 'lecture_plan'
     assert '講義設計' in result['error_message'] and '81' in result['error_message']
     assert 'PRIVATE' not in json.dumps(saved)
+
+
+def test_section_timeout_identifies_stage_and_preserves_successful_sections(env):
+    from src.codex_provider import ProviderError
+
+    provider, service, store, manager = env
+    req = make_request(service)
+    def fail_second(data, cancel):
+        if data['input'].get('section', {}).get('section_id') == 's2':
+            raise ProviderError('timeout', 'synthetic timeout', diagnostic={'category': 'timeout', 'limit': 180})
+    provider.hook = fail_second
+    job = wait_job(manager, submit(env, req))
+    assert job['diagnostic'] == {'category': 'timeout', 'stage': 'lecture_section', 'limit': 180,
+                                 'path': ['sections', 1]}
+    assert '第2節' in job['error_message'] and '180秒' in job['error_message']
+    saved = checkpoint(store, req)
+    assert len(saved['sections']) == 1 and len(provider.calls) == 3
+    assert saved['attempts'][-1]['diagnostic'] == job['diagnostic']

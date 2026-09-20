@@ -35,10 +35,10 @@ KEYWORDS = {'minLength', 'maxLength', 'uniqueItems', 'minItems', 'maxItems',
 
 
 def sanitize_diagnostic(value: Any) -> dict:
-    if not isinstance(value, dict) or value.get('category') not in ('json_parse', 'schema_validation'):
+    if not isinstance(value, dict) or value.get('category') not in ('json_parse', 'schema_validation', 'timeout'):
         return {}
     result: dict[str, Any] = {'category': value['category']}
-    if isinstance(value.get('stage'), str) and value['stage'] in SCHEMAS:
+    if isinstance(value.get('stage'), str) and value['stage'] in {*SCHEMAS, 'lecture_batch'}:
         result['stage'] = value['stage']
     if isinstance(value.get('keyword'), str) and value['keyword'] in KEYWORDS:
         result['keyword'] = value['keyword']
@@ -66,7 +66,12 @@ def diagnostic_message(value: Any) -> str:
     value = sanitize_diagnostic(value)
     if not value:
         return ''
-    stage = {'lecture_plan': '講義設計', 'lecture_section': '講義本文'}.get(value.get('stage'), '生成結果')
+    stage = {'lecture_plan': '講義設計', 'lecture_section': '講義本文', 'lecture_batch': '章全体の作成'}.get(value.get('stage'), '生成結果')
+    if value['category'] == 'timeout':
+        limit = f"{value['limit']}秒" if 'limit' in value else '制限時間'
+        path = value.get('path', [])
+        section = f"（第{path[1] + 1}節）" if len(path) == 2 and path[0] == 'sections' and type(path[1]) is int else ''
+        return f'{stage}{section}が{limit}の上限に達しました。成功済みの節は保存されています。'
     if value['category'] == 'json_parse':
         return f'{stage}をJSONとして読み取れませんでした。'
     path = '$' + ''.join(f'[{p + 1}]' if type(p) is int else f'.{p}' for p in value.get('path', []))

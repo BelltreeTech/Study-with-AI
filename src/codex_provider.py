@@ -630,7 +630,8 @@ class CodexProvider:
                 if cancel.is_set():
                     raise ProviderError("cancelled", "生成をキャンセルしました。進捗は変更していません。")
                 if time.monotonic() >= deadline:
-                    raise ProviderError("timeout", "生成が時間上限に達しました。子プロセスを停止しました。")
+                    raise ProviderError("timeout", "生成が時間上限に達しました。子プロセスを停止しました。",
+                                        diagnostic={"category": "timeout", "limit": int(self.settings.timeout_seconds if timeout_seconds is None else timeout_seconds)})
                 for key, _ in selector.select(timeout=0.05):
                     block = os.read(key.fd, 65_536)
                     if not block:
@@ -658,7 +659,8 @@ class CodexProvider:
                 if cancel.is_set():
                     raise ProviderError("cancelled", "生成をキャンセルしました。進捗は変更していません。")
                 if time.monotonic() >= deadline:
-                    raise ProviderError("timeout", "生成が時間上限に達しました。子プロセスを停止しました。")
+                    raise ProviderError("timeout", "生成が時間上限に達しました。子プロセスを停止しました。",
+                                        diagnostic={"category": "timeout", "limit": int(self.settings.timeout_seconds if timeout_seconds is None else timeout_seconds)})
                 cancel.wait(0.05)
             if cancel.is_set():
                 raise ProviderError("cancelled", "生成をキャンセルしました。進捗は変更していません。")

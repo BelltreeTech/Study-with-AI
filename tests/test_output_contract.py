@@ -92,3 +92,12 @@ def test_job_persists_safe_details_across_restart_without_retry(tmp_path):
     with JobManager(db) as manager:
         assert manager.get(job_id)['diagnostic'] == job['diagnostic']
     assert calls == [1]
+
+
+def test_timeout_diagnostic_distinguishes_batch_from_section():
+    from src.output_contract import diagnostic_message
+    section = diagnostic_message({'category': 'timeout', 'stage': 'lecture_section',
+                                  'limit': 180, 'path': ['sections', 4]})
+    batch = diagnostic_message({'category': 'timeout', 'stage': 'lecture_batch', 'limit': 1800})
+    assert '第5節' in section and '180秒' in section
+    assert '章全体' in batch and '1800秒' in batch

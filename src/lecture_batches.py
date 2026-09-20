@@ -57,6 +57,7 @@ class _Cancellation:
         self.parent = parent
         self.child = threading.Event()
         self.finished = threading.Event()
+        self.seconds = seconds
         self.deadline = time.monotonic() + seconds
         fd = getattr(parent, "execution_lock_fd", None)
         if type(fd) is not int or fd < 0:
@@ -78,7 +79,9 @@ class _Cancellation:
             raise LectureBatchError("cancelled")
         if time.monotonic() >= self.deadline:
             self.child.set()
-            raise LectureBatchError("timeout")
+            failure = LectureBatchError("timeout")
+            failure.diagnostic = {"category": "timeout", "stage": "lecture_batch", "limit": int(self.seconds)}
+            raise failure
 
     def __enter__(self) -> _Cancellation:
         self.check()
@@ -358,6 +361,12 @@ class LectureBatch:
             code = str(getattr(cause, "code", "worker_error"))
             failure = LectureBatchError(code)
             failure.diagnostic = sanitize_diagnostic(getattr(cause, "diagnostic", None))
+            if (failure.diagnostic.get("category") == "timeout"
+                    and failure.diagnostic.get("stage") == "lecture_section"
+                    and document["attempts"]):
+                section_id = document["attempts"][-1].get("section_id")
+                if section_id in {f"s{i}" for i in range(1, 9)}:
+                    failure.diagnostic["path"] = ["sections", int(section_id[1:]) - 1]
             if document["status"] == "succeeded":
                 # Re-reading an already completed edition must not rewrite its
                 # historical completion if this new job is stale or cancelled.

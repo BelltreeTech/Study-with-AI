@@ -304,7 +304,7 @@ class JobManager:
                 else:
                     state, result, code = "succeeded", outcome["result"], None
                 message = ERROR_MESSAGES.get(code, ERROR_MESSAGES["worker_error"]) if code else None
-                if state == "failed" and code == "schema_error" and outcome.get("diagnostic"):
+                if state == "failed" and code in ("schema_error", "timeout") and outcome.get("diagnostic"):
                     detail = outcome["diagnostic"]
                     conn.execute("INSERT OR REPLACE INTO job_diagnostics VALUES (?,?)", (job_id, canonical_json(detail)))
                     message = diagnostic_message(detail) + " 進捗は更新していません。自動再生成は行いません。"
