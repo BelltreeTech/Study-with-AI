@@ -236,3 +236,27 @@ def test_reading_location_survives_navigation_and_isolated_by_edition(ui_environ
     finish_jobs(app, ui_environment)
     assert selectbox(app, '読む範囲').value == ''
     assert_clean(app)
+
+
+def test_course_schema_detail_remains_after_dismiss_without_generation(ui_environment, monkeypatch):
+    from src.codex_provider import ProviderError
+
+    app = ui_environment.app()
+    course_id = create_course(app, ui_environment)
+    before = progress.load_course_progress(course_id)
+    calls = []
+    def fail(*args, **kwargs):
+        calls.append(1)
+        raise ProviderError('schema_error', 'PRIVATE output', diagnostic={
+            'category': 'schema_validation', 'keyword': 'maxLength',
+            'path': ['sections', 0, 'title'], 'limit': 80, 'actual': 81})
+    monkeypatch.setattr(ui_environment.provider, 'generate', fail)
+    button(app, 'この章の講義を生成').click().run()
+    finish_jobs(app, ui_environment, allow_error=True)
+    assert any('講義設計' in error.value and '81' in error.value for error in app.error)
+    button(app, '通知を閉じる').click().run()
+    assert any('講義設計' in warning.value and '文字数' in warning.value for warning in app.warning)
+    app.run()
+    assert calls == [1]
+    assert progress.load_course_progress(course_id) == before
+    assert progress.get_dashboard_data()['profile']['total_exp'] == 0

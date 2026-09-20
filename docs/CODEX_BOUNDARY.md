@@ -177,3 +177,7 @@ STUDY_RUN_CODEX_BOUNDARY_PROBE=1 uv run pytest tests/test_provider.py -q
 追加の診断回帰では、巨大 stderr の上限、診断中 cancel、診断 timeout の子・孤児子プロセス回収、4 診断で共有する単一 deadline、内部 retry 制御が未確認なら `ready=true` にならないことを検査した。fake CLI fixture だけが retry audit gate を monkeypatch しており、本番に gate を外す UI・環境変数・設定項目は存在しない。
 
 最終統合後の再実行は **37 passed in 34.83s**。直前にはfixtureの250ms期限がPythonの起動前に切れる失敗を1件確認したため、子process回収試験の期限を2秒へ変更した。fakeは30秒待機し、実際の親・子PIDの消滅assertを維持している。本番Providerのtimeout設定や停止処理は変更していない。失敗と再検証を[TEST_REPORT.md](TEST_REPORT.md)に区別して記録した。
+
+### 形式指定と診断の補強（2026-09-20）
+
+送信用Schemaの互換性射影とローカルの厳密検証を維持し、射影で除いた文字数・重複制約を元Schemaから生成してプロンプト先頭に追加する。追加後も入力上限65,536バイトを適用。診断は定義済みフィールド名、固定category/keyword、有限の非負整数だけに絞り、生の回答・CLI出力・ValidationError.messageは保存しない。ジョブと講義試行に同じ安全な診断を保持する。実行境界、CLI、model/effort、retry、timeout、キャンセルの設定変更はない。

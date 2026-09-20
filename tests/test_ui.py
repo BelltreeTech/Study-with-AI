@@ -328,3 +328,27 @@ def test_ui_pomodoro_completion_awards_once(ui_environment):
     assert progress.get_dashboard_data()['profile']['total_exp'] == 20
     assert progress.get_dashboard_data()['profile']['total_pomodoros'] == 1
     assert ui_environment.provider.calls == []
+
+
+def test_ui_schema_failure_shows_safe_detail_without_progress(ui_environment, monkeypatch):
+    from src.codex_provider import ProviderError
+
+    calls = []
+    def fail(*args, **kwargs):
+        calls.append(1)
+        raise ProviderError('schema_error', 'PRIVATE synthetic output', diagnostic={
+            'category': 'schema_validation', 'keyword': 'maxLength',
+            'path': ['title'], 'limit': 120, 'actual': 121})
+    monkeypatch.setattr(ui_environment.provider, 'generate', fail)
+    app = ui_environment.app()
+    selectbox(app, '科目').select(SUBJECT).run()
+    navigate(app, 'RAG')
+    before = progress.get_repository().read()
+    text_input(app, '検索語・質問').input('retrieval practice').run()
+    button(app, '教材に基づいて回答').click().run()
+    finish_jobs(app, ui_environment, allow_error=True)
+    messages = ' '.join(item.value for item in app.error)
+    assert '文字数が上限' in messages and '121' in messages and 'PRIVATE' not in messages
+    assert progress.get_repository().read() == before
+    app.run()
+    assert calls == [1]

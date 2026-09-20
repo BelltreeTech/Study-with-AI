@@ -441,3 +441,22 @@ def test_failed_replay_does_not_rewrite_completed_edition(env, cancelled):
     failed = wait_job(manager, job)
     assert failed["error_code"] == ("cancelled" if cancelled else "invalid_result")
     assert checkpoint(store, request) == original and len(provider.calls) == 4
+
+
+def test_schema_diagnostic_survives_batch_wrapping_and_checkpoint(env):
+    from src.codex_provider import ProviderError
+
+    provider, service, store, manager = env
+    req = make_request(service)
+    def fail_plan(data, cancel):
+        raise ProviderError('schema_error', 'PRIVATE raw error', diagnostic={
+            'category': 'schema_validation', 'keyword': 'maxLength',
+            'path': ['sections', 0, 'title'], 'limit': 80, 'actual': 81})
+    provider.hook = fail_plan
+    result = wait_job(manager, submit(env, req))
+    saved = checkpoint(store, req)
+    assert len(provider.calls) == 1 and saved['plan'] is None and saved['sections'] == []
+    assert saved['attempts'][-1]['diagnostic'] == result['diagnostic']
+    assert result['diagnostic']['stage'] == 'lecture_plan'
+    assert '講義設計' in result['error_message'] and '81' in result['error_message']
+    assert 'PRIVATE' not in json.dumps(saved)

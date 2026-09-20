@@ -20,6 +20,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
+from src.output_contract import diagnostic_message, sanitize_diagnostic
 from src.repository import canonical_json, ensure_private_database_file, now_iso, sqlite_initialization_lock
 
 TERMINAL_STATES = frozenset({"succeeded", "failed", "cancelled", "interrupted"})
@@ -109,6 +110,7 @@ class JobManager:
                 created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
                 CHECK(state IN ('queued','running','succeeded','failed','cancelled','interrupted'))
             )""")
+            conn.execute("CREATE TABLE IF NOT EXISTS job_diagnostics (job_id TEXT PRIMARY KEY, diagnostic TEXT NOT NULL)")
             conn.execute("CREATE INDEX IF NOT EXISTS jobs_state_owner ON jobs(state,owner)")
         os.chmod(self.db_path, 0o600)
 
@@ -149,9 +151,11 @@ class JobManager:
     def get(self, job_id: str) -> dict[str, Any] | None:
         with closing(self._connect()) as conn:
             row = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+            diagnostic = conn.execute("SELECT diagnostic FROM job_diagnostics WHERE job_id=?", (job_id,)).fetchone()
         if row is None:
             return None
         value = dict(row)
+        value["diagnostic"] = sanitize_diagnostic(json.loads(diagnostic[0])) if diagnostic else {}
         for key in ("scope", "payload", "result"):
             value[key] = json.loads(value[key]) if value[key] is not None else None
         value["job_id"] = value["id"]
@@ -275,6 +279,7 @@ class JobManager:
                 outcome["result"] = canonical_json(result)
             except BaseException as exc:
                 code = str(getattr(exc, "code", "worker_error"))
+                outcome["diagnostic"] = sanitize_diagnostic(getattr(exc, "diagnostic", None))
                 outcome["error_code"] = code if re.fullmatch(r"[a-z_]{1,48}", code) else "worker_error"
             finally:
                 completed.set()
@@ -299,6 +304,10 @@ class JobManager:
                 else:
                     state, result, code = "succeeded", outcome["result"], None
                 message = ERROR_MESSAGES.get(code, ERROR_MESSAGES["worker_error"]) if code else None
+                if state == "failed" and code == "schema_error" and outcome.get("diagnostic"):
+                    detail = outcome["diagnostic"]
+                    conn.execute("INSERT OR REPLACE INTO job_diagnostics VALUES (?,?)", (job_id, canonical_json(detail)))
+                    message = diagnostic_message(detail) + " 進捗は更新していません。自動再生成は行いません。"
                 conn.execute("UPDATE jobs SET state=?,result=?,error_code=?,error_message=?,finished_at=? WHERE id=?", (state, result, code, message, now_iso(), job_id))
             conn.commit()
         finally:

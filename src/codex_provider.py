@@ -23,6 +23,7 @@ from jsonschema import Draft202012Validator, SchemaError, ValidationError
 
 from src.codex_policy import managed_policy_present
 from src.config import LLM_MODEL, MODEL_EFFORT
+from src.output_contract import omitted_constraints, sanitize_diagnostic, validation_diagnostic
 
 AUDITED_CLI_VERSION = "0.155.1"
 # Populated from the integrity-verified official darwin-arm64 release.
@@ -59,10 +60,11 @@ DEVELOPER_INSTRUCTIONS = (
 class ProviderError(RuntimeError):
     """A public, sanitized error. Never include raw CLI output or student data."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, *, diagnostic: dict | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.diagnostic = sanitize_diagnostic(diagnostic)
 
 
 def execution_summary(stdout: bytes, stderr: bytes, returncode: int) -> dict[str, Any]:
@@ -760,9 +762,14 @@ class CodexProvider:
             raise ProviderError("incomplete_output", "Codex の完了イベントと最終回答が揃っていません。")
         try:
             result = json.loads(final)
+        except json.JSONDecodeError as exc:
+            raise ProviderError("schema_error", "生成結果の形式が正しくありません。進捗は変更していません。",
+                                diagnostic={"category": "json_parse", "line": exc.lineno, "column": exc.colno}) from exc
+        try:
             Draft202012Validator(schema).validate(result)
-        except (json.JSONDecodeError, ValidationError) as exc:
-            raise ProviderError("schema_error", "生成結果の形式が正しくありません。進捗は変更していません。") from exc
+        except ValidationError as exc:
+            raise ProviderError("schema_error", "生成結果の形式が正しくありません。進捗は変更していません。",
+                                diagnostic=validation_diagnostic(exc)) from exc
         if not isinstance(result, dict):
             raise ProviderError("schema_error", "生成結果がオブジェクトではありません。")
         return result
@@ -782,6 +789,12 @@ class CodexProvider:
     def _generate(self, prompt: str, schema: dict[str, Any],
                   cancel_event: threading.Event | None = None, *, explicit_probe: bool = False) -> dict[str, Any]:
         self.last_execution_metadata = {"stage": "preflight"}
+        # Keep wire compatibility while explicitly communicating every omitted
+        # constraint. This trusted prefix precedes the untrusted DATA envelope.
+        constraints = omitted_constraints(schema)
+        if prompt.strip() and constraints:
+            prompt = ("OUTPUT_CONSTRAINTS（必須。文字数はUnicode文字数、uniqueItems=Trueは重複禁止）:\n"
+                      + "\n".join(constraints) + "\n" + prompt)
         prompt_bytes = prompt.encode("utf-8")
         if not prompt.strip() or len(prompt_bytes) > self.settings.max_input_bytes:
             raise ProviderError("invalid_request", "入力が空、または入力上限を超えています。教材抜粋を減らしてください。")
@@ -808,6 +821,7 @@ class CodexProvider:
                                      allow_missing_metadata=explicit_probe or self._successful_probe == self._context_identity())
             except ProviderError as exc:
                 self.last_execution_metadata["error_code"] = exc.code
+                self.last_execution_metadata["diagnostic"] = exc.diagnostic
                 raise
             self.last_execution_metadata["stage"] = "completed"
             return result

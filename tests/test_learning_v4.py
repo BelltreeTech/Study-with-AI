@@ -124,6 +124,8 @@ def test_time_prompts_separate_input_from_self_practice():
     result = svc.execute(svc.prepare("lecture_plan", "Synthetic/Study", "s", {"title": "Concepts"}, LearningOptions()))
     assert result["learning_options"]["time_scope"] == "lecture_input"
     assert "session_minutesは講義の説明を読む時間だけ" in provider.calls[0]
+    assert "insufficient_evidence=true" not in provider.calls[0]
+    assert "supplemental_markdownへ" not in provider.calls[0]
 
 
 @pytest.mark.parametrize("change", ["missing-summary", "nonsequential", "math", "code"])

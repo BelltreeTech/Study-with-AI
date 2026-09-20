@@ -7,6 +7,7 @@ import streamlit as st
 
 from src.config import LearningOptions
 from src.lecture_batches import lecture_batch_scope
+from src.output_contract import diagnostic_message
 from src.runtime import Runtime
 from src.views.common import render_markdown, render_pending, show_text, submit
 
@@ -66,6 +67,9 @@ def batch_controls(runtime: Runtime, subject: str, course_id: str, index: int,
             st.info('本文はすべて保存済みです。下のボタンで講義へ反映します。追加の生成要求はありません。')
         else:
             st.info(f"作成途中: {len(checkpoint.get('sections', []))}節を保存済み。自動再開はしません。")
+        attempts = checkpoint.get('attempts', [])
+        if not finished and attempts and attempts[-1].get('diagnostic'):
+            st.warning(diagnostic_message(attempts[-1]['diagnostic']) + ' 成功済みの節は保持しています。')
         for section in checkpoint.get('sections', []):
             with st.expander('作成途中 · ' + section.get('section_id', '節')):
                 show_text(section)

@@ -19,6 +19,7 @@ from typing import Any
 from src.config import LLM_MODEL, MODEL_EFFORT, PROMPT_VERSION, SCHEMA_VERSION
 from src.jobs import ERROR_MESSAGES
 from src.learning_repository import LearningRepository
+from src.output_contract import sanitize_diagnostic
 from src.repository import canonical_json, now_iso
 from src.schemas import SCHEMAS, validate_lecture_plan, validate_lecture_section
 from src.service import LearningRequest, StudyService
@@ -29,6 +30,7 @@ MAX_BATCH_SECONDS = 1800
 class LectureBatchError(RuntimeError):
     def __init__(self, code: str):
         self.code = code if code in ERROR_MESSAGES else "worker_error"
+        self.diagnostic: dict = {}
         super().__init__(ERROR_MESSAGES[self.code])
 
 
@@ -355,6 +357,7 @@ class LectureBatch:
                 cause = stopped
             code = str(getattr(cause, "code", "worker_error"))
             failure = LectureBatchError(code)
+            failure.diagnostic = sanitize_diagnostic(getattr(cause, "diagnostic", None))
             if document["status"] == "succeeded":
                 # Re-reading an already completed edition must not rewrite its
                 # historical completion if this new job is stale or cancelled.
@@ -363,5 +366,7 @@ class LectureBatch:
             changed.update(status="cancelled" if failure.code == "cancelled" else "failed", error_code=failure.code)
             if changed["attempts"] and changed["attempts"][-1]["status"] == "running":
                 changed["attempts"][-1].update(status=changed["status"], error_code=failure.code, finished_at=now_iso())
+            if changed["attempts"] and failure.diagnostic:
+                changed["attempts"][-1]["diagnostic"] = failure.diagnostic
             self._save(scope, name, document, changed)
             raise failure from cause
