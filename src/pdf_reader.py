@@ -1,132 +1,84 @@
-"""
-PDF読み込み・テキスト抽出モジュール。
+"""Page-aware PDF extraction; only image pages with insufficient text use OCR."""
+from __future__ import annotations
 
-PyMuPDF（fitz）を使用してPDFからページ単位でテキストを抽出する。
-テキストが極端に少ない（画像PDF）場合は、OCRにフォールバックする。
-"""
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
 
-import fitz  # PyMuPDF
+import fitz
 
-# OCRフォールバック用（画像PDF対応）
-try:
-    from pdf2image import convert_from_path
+
+@dataclass(frozen=True)
+class ExtractionSettings:
+    ocr_text_threshold: int = 20
+    ocr_enabled: bool = True
+    ocr_language: str = "jpn+eng"
+    ocr_dpi: int = 150
+    ocr_timeout_seconds: int = 30
+    max_pages: int = 1000
+    max_ocr_pixels: int = 20_000_000
+    max_pdf_bytes: int = 100 * 1024 * 1024
+    version: int = 2
+
+
+class PDFExtractionError(ValueError):
+    pass
+
+
+def _ocr_page(page: fitz.Page, settings: ExtractionSettings) -> str:
+    # PyMuPDF renders only the selected page; Poppler is not required.
     import pytesseract
-
-    _ocr_available: bool = True
-except ImportError:
-    _ocr_available = False
-
-from src.config import OCR_TEXT_THRESHOLD
-
-# 画像PDFと判断するテキスト文字数の閾値
-k_ocrThreshold: int = OCR_TEXT_THRESHOLD
-
-
-def extract_text_from_pdf(pdf_path: str) -> list[dict]:
-    """
-    PDFファイルからページごとにテキストを抽出する。
-
-    まずPyMuPDFでテキスト抽出を試み、抽出量が閾値以下の場合は
-    OCR（pytesseract + pdf2image）にフォールバックする。
-
-    Args:
-        pdf_path: PDFファイルのパス
-
-    Returns:
-        各ページの情報を含む辞書のリスト。
-        各辞書は {"page_number": int, "text": str} の形式。
-    """
-    # ---- 1. PyMuPDFでテキスト抽出を試行 ----
-    pages: list[dict] = _extract_with_pymupdf(pdf_path)
-    total_chars: int = sum(len(p["text"]) for p in pages)
-
-    if total_chars > k_ocrThreshold:
-        return pages
-
-    # ---- 2. テキストが少ない → OCRフォールバック ----
-    print(f"  [PDFReader] テキスト量が少ない（{total_chars}文字）。OCRモードに切替: {pdf_path}")
-
-    if not _ocr_available:
-        print("  [PDFReader] ⚠️ OCRライブラリ未インストール。テキスト抽出をスキップ。")
-        if pages:
-            return pages
-        raise ValueError(f"画像PDFですがOCRライブラリが利用できません: {pdf_path}")
-
-    ocr_pages: list[dict] = _extract_with_ocr(pdf_path)
-
-    if ocr_pages:
-        return ocr_pages
-
-    # OCRでも取得できなかった場合、PyMuPDFの結果があればそれを返す
-    if pages:
-        return pages
-
-    raise ValueError(f"PyMuPDF・OCR両方でテキストを抽出できませんでした: {pdf_path}")
+    from PIL import Image
+    scale = settings.ocr_dpi / 72
+    if page.rect.width * page.rect.height * scale * scale > settings.max_ocr_pixels:
+        raise PDFExtractionError("OCR画像サイズが上限を超えています")
+    pix = page.get_pixmap(dpi=settings.ocr_dpi, alpha=False)
+    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return str(pytesseract.image_to_string(image, lang=settings.ocr_language,
+                                         timeout=settings.ocr_timeout_seconds)).strip()
 
 
-def _extract_with_pymupdf(pdf_path: str) -> list[dict]:
-    """PyMuPDFでPDFからテキストを抽出する。"""
-    pages: list[dict] = []
-
+def extract_text_from_pdf(pdf_path: str | Path | bytes, *,
+                          settings: ExtractionSettings | None = None,
+                          ocr: Callable | None = None) -> list[dict]:
+    settings = settings or ExtractionSettings()
+    raw = pdf_path if isinstance(pdf_path, bytes) else Path(pdf_path).read_bytes()
+    if len(raw) > settings.max_pdf_bytes:
+        raise PDFExtractionError("PDFが読込サイズ上限を超えています")
     try:
-        doc = fitz.open(pdf_path)
-    except Exception as e:
-        raise FileNotFoundError(f"PDFファイルを開けません: {pdf_path} - {e}")
-
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        text: str = page.get_text("text")
-
-        # 空白のみのページはスキップ
-        if text.strip():
-            pages.append({
-                "page_number": page_num + 1,  # 1-indexed
-                "text": text.strip(),
-            })
-
-    doc.close()
+        doc = fitz.open(stream=raw, filetype="pdf")
+    except Exception as exc:
+        raise PDFExtractionError("PDFを開けません。破損または未対応の形式です") from exc
+    pages = []
+    with doc:
+        if doc.is_encrypted:
+            raise PDFExtractionError("暗号化PDFは未対応です")
+        if len(doc) > settings.max_pages:
+            raise PDFExtractionError("PDFのページ数が上限を超えています")
+        for page_number, page in enumerate(doc, start=1):
+            warnings: list[str] = []
+            try:
+                text = page.get_text("text").strip()
+                image_page = bool(page.get_images())
+            except Exception:
+                pages.append({"page_number": page_number, "text": "", "method": "failed",
+                              "warnings": ["page_extraction_failed"]})
+                continue
+            method = "text"
+            # Sparse text-only pages need no OCR. Blank pages keep their numbering.
+            if len(text) < settings.ocr_text_threshold and image_page:
+                if settings.ocr_enabled:
+                    try:
+                        extracted = (ocr or _ocr_page)(page, settings).strip()
+                        if extracted:
+                            if len(extracted) > len(text):
+                                text, method = extracted, "ocr"
+                        else:
+                            warnings.append("ocr_empty")
+                    except Exception:
+                        warnings.append("ocr_unavailable_or_failed")
+                else:
+                    warnings.append("ocr_disabled")
+            pages.append({"page_number": page_number, "text": text,
+                          "method": method, "warnings": warnings})
     return pages
-
-
-def _extract_with_ocr(pdf_path: str) -> list[dict]:
-    """pdf2image + pytesseract でOCRテキスト抽出を行う。"""
-    pages: list[dict] = []
-
-    try:
-        # PDFを画像に変換（Popplerはパスから自動検出）
-        images = convert_from_path(pdf_path, dpi=300)
-    except Exception as e:
-        print(f"  [PDFReader] ⚠️ PDF→画像変換に失敗: {e}")
-        return pages
-
-    for i, image in enumerate(images):
-        try:
-            text: str = pytesseract.image_to_string(image, lang="jpn+eng")
-        except Exception as e:
-            print(f"  [PDFReader] ⚠️ OCR失敗（ページ{i + 1}）: {e}")
-            continue
-
-        if text.strip():
-            pages.append({
-                "page_number": i + 1,
-                "text": text.strip(),
-            })
-
-    if pages:
-        print(f"  [PDFReader] OCR完了: {len(pages)} ページ抽出")
-    else:
-        print(f"  [PDFReader] ⚠️ OCRでもテキストを抽出できませんでした")
-
-    return pages
-
-
-if __name__ == "__main__":
-    # 動作確認用
-    import sys
-
-    pdf_path = sys.argv[1] if len(sys.argv) > 1 else "Deep Learning from Scratch (Seth Weidman).pdf"
-    pages = extract_text_from_pdf(pdf_path)
-    print(f"抽出ページ数: {len(pages)}")
-    for p in pages[:3]:
-        print(f"--- ページ {p['page_number']} (先頭200文字) ---")
-        print(p["text"][:200])
