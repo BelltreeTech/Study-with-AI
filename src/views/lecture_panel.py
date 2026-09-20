@@ -59,11 +59,15 @@ def batch_controls(runtime: Runtime, subject: str, course_id: str, index: int,
     st.caption('初回は設計1回＋本文最大8節（最大9生成要求）。各要求180秒、1回の開始・再開全体30分。'
                '成功節を保存し、明示再開時は未完了分だけ追加で生成します。')
     if partial and not active:
-        st.info(f"作成途中: {len(checkpoint.get('sections', []))}節を保存済み。自動再開はしません。")
+        finished = checkpoint.get('status') == 'succeeded'
+        if finished:
+            st.info('本文はすべて保存済みです。下のボタンで講義へ反映します。追加の生成要求はありません。')
+        else:
+            st.info(f"作成途中: {len(checkpoint.get('sections', []))}節を保存済み。自動再開はしません。")
         for section in checkpoint.get('sections', []):
             with st.expander('作成途中 · ' + section.get('section_id', '節')):
                 show_text(section)
-        if st.button('未完了の節から再開'):
+        if st.button('保存済みの講義を反映' if finished else '未完了の節から再開'):
             submit(runtime, scope, 'lecture_batch', {
                 'title': chapter['title'], 'description': chapter.get('description', ''),
                 '_chapter_index': index, '_previous_lecture_id': lecture.get('lecture_id'),

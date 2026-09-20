@@ -194,3 +194,53 @@ def test_append_session_refuses_corrupt_registry_without_reset(tmp_path):
         repository.append_session('other-subject', '')
     with pytest.raises(ValueError):
         repository.clear_pending('scope', '')
+
+
+def test_practice_replacement_archives_latest_atomically_and_only_once(tmp_path):
+    store = LearningRepository(tmp_path / 'learning.sqlite3')
+    first = {'practice_id': 'first', 'questions': ['synthetic first']}
+    second = {'practice_id': 'second', 'questions': ['synthetic second']}
+    store.set('scope', 'practice_set', first)
+    assert store.apply_result('new-job', 'scope', {'practice_set': second})
+    assert store.get('scope', 'practice_set') == second
+    assert store.get('scope', 'practice_archive:first') == first
+    assert store.get('scope', 'practice_ids') == ['first']
+    assert not store.apply_result('new-job', 'scope', {'practice_set': second})
+    assert store.get('scope', 'practice_ids') == ['first']
+
+
+def test_failed_practice_replacement_rolls_back_archive_and_receipt(tmp_path, monkeypatch):
+    store = LearningRepository(tmp_path / 'learning.sqlite3')
+    first = {'practice_id': 'first'}
+    store.set('scope', 'practice_set', first)
+    original = store._write
+
+    def fail_on_replacement(db, scope, name, value):
+        if name == 'practice_set':
+            raise RuntimeError('synthetic disk failure')
+        return original(db, scope, name, value)
+
+    monkeypatch.setattr(store, '_write', fail_on_replacement)
+    with pytest.raises(RuntimeError, match='synthetic disk failure'):
+        store.apply_result('failed-job', 'scope', {'practice_set': {'practice_id': 'second'}})
+    assert store.get('scope', 'practice_set') == first
+    assert store.get('scope', 'practice_archive:first') is None
+    assert store.get('scope', 'practice_ids') is None
+    assert not store.has_receipt('failed-job', 'scope')
+
+
+def test_simultaneous_practice_results_keep_every_set(tmp_path):
+    store = LearningRepository(tmp_path / 'learning.sqlite3')
+    store.set('scope', 'practice_set', {'practice_id': 'first'})
+    barrier = threading.Barrier(2)
+
+    def apply(pid):
+        barrier.wait()
+        return store.apply_result(pid, 'scope', {'practice_set': {'practice_id': pid}})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert all(pool.map(apply, ['second', 'third']))
+    latest = store.get('scope', 'practice_set')['practice_id']
+    ids = store.get('scope', 'practice_ids')
+    assert len(ids) == 2 and set(ids + [latest]) == {'first', 'second', 'third'}
+    assert all(store.get('scope', 'practice_archive:' + pid)['practice_id'] == pid for pid in ids)

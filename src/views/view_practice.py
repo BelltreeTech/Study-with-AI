@@ -14,6 +14,10 @@ def _save_review(runtime, scope, key):
     runtime.store.set(scope, 'review_candidate', st.session_state[key])
 
 
+def _save_selection(runtime, scope, key):
+    runtime.store.set(scope, 'selected_practice', st.session_state[key])
+
+
 def render_practice(runtime, subject, session, course_id, index, lecture, teaching):
     st.subheader('理解を深める練習')
     st.caption('1セット3問。ヒント・解答の表示では生成しません。答案を送信したときだけフィードバックを生成します。'
@@ -27,11 +31,6 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
     active = render_pending(runtime, scope)
     current = runtime.store.get(scope, 'practice_set')
     if st.button('練習を3問作る', disabled=active):
-        if current:
-            runtime.store.set(scope, 'practice_archive:' + current['practice_id'], current)
-            ids = runtime.store.get(scope, 'practice_ids', [])
-            if current['practice_id'] not in ids:
-                runtime.store.set(scope, 'practice_ids', ids + [current['practice_id']])
         submit(runtime, scope, 'practice_set', {
             'topic': lecture.get('plan', {}).get('title', 'この章の理解'),
             **select_edition_context(lecture, target or None),
@@ -41,9 +40,19 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
     choices = ([current['practice_id']] if current else []) + runtime.store.get(scope, 'practice_ids', [])
     if not choices:
         return
+    selection_key = 'practice_set_' + scope
+    observed_key = 'practice_latest_' + scope
+    if current and st.session_state.get(observed_key, runtime.store.get(scope, 'last_seen_practice')) != current['practice_id']:
+        st.session_state[selection_key] = current['practice_id']
+        st.session_state[observed_key] = current['practice_id']
+        runtime.store.set(scope, 'last_seen_practice', current['practice_id'])
+        runtime.store.set(scope, 'selected_practice', current['practice_id'])
+    elif selection_key not in st.session_state:
+        saved_selection = runtime.store.get(scope, 'selected_practice')
+        st.session_state[selection_key] = saved_selection if saved_selection in choices else choices[0]
     selected = st.selectbox('練習セット', list(dict.fromkeys(choices)),
                             format_func=lambda value: ('最新 · ' if current and value == current['practice_id'] else '履歴 · ') + value[:8],
-                            key='practice_set_' + scope)
+                            key=selection_key, on_change=_save_selection, args=(runtime, scope, selection_key))
     practice = current if current and selected == current['practice_id'] else runtime.store.get(scope, 'practice_archive:' + selected)
     if not practice:
         return
@@ -53,11 +62,13 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
         with st.container(border=True):
             st.markdown('**' + question['prompt'] + '**')
             st.caption('学習目標: ' + question['learning_objective'])
-            hints = runtime.store.get(qscope, 'hints_used', 0)
+            hints_used = runtime.store.get(qscope, 'hints_used', 0)
+            hints = runtime.store.get(qscope, 'hints_revealed', min(hints_used, len(question['hints'])))
             for hint in question['hints'][:hints]:
                 st.info(hint)
             if st.button('次のヒントを見る', key='hint_' + qscope, disabled=hints >= len(question['hints'])):
-                runtime.store.set(qscope, 'hints_used', hints + 1)
+                runtime.store.set(qscope, 'hints_used', hints_used + 1)
+                runtime.store.set(qscope, 'hints_revealed', hints + 1)
                 st.rerun()
             if st.button('解答・解説を開く', key='reveal_' + qscope):
                 runtime.store.set(qscope, 'answer_revealed', True)
@@ -95,6 +106,7 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
             if st.button('もう一度解く（提出履歴は保持）', key='retry_' + qscope, disabled=pending):
                 runtime.store.set(qscope, 'draft', '')
                 runtime.store.set(qscope, 'answer_revealed', False)
+                runtime.store.set(qscope, 'hints_revealed', 0)
                 st.session_state.pop(key, None)
                 st.rerun()
 
@@ -122,6 +134,7 @@ def show_practice_history(runtime, subject, session, course_id, index, lecture):
                           'submissions': runtime.store.get(qscope, 'submissions', []),
                           'hints_used': runtime.store.get(qscope, 'hints_used', 0),
                           'review_candidate': runtime.store.get(qscope, 'review_candidate', False)}
+                record['hints_revealed'] = runtime.store.get(qscope, 'hints_revealed', min(record['hints_used'], len(question['hints'])))
                 if runtime.store.get(qscope, 'answer_revealed', False):
                     record.update(answer=question['answer'], explanation=question['explanation'])
                 records.append(record)

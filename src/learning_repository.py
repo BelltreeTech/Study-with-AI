@@ -202,6 +202,25 @@ class LearningRepository:
             db.execute('BEGIN IMMEDIATE')
             if self._receipt(db, job_id, scope):
                 return False
+            if 'practice_set' in updates:
+                # Archive the actual latest set, not a stale browser snapshot.
+                # Archive, replacement and receipt must commit or roll back together.
+                row = db.execute('SELECT value FROM learning_documents WHERE scope=? AND name=?',
+                                 (scope, 'practice_set')).fetchone()
+                previous = json.loads(row[0]) if row else None
+                if previous is not None and not isinstance(previous, dict):
+                    raise ValueError('保存済み練習の形式が不正です。元データを保持して停止しました。')
+                if previous and previous.get('practice_id') != updates['practice_set']['practice_id']:
+                    previous_id = previous.get('practice_id')
+                    if not isinstance(previous_id, str) or not previous_id:
+                        raise ValueError('保存済み練習のIDが不正です。元データを保持して停止しました。')
+                    row = db.execute('SELECT value FROM learning_documents WHERE scope=? AND name=?',
+                                     (scope, 'practice_ids')).fetchone()
+                    ids = json.loads(row[0]) if row else []
+                    if not isinstance(ids, list) or any(not isinstance(item, str) or not item for item in ids):
+                        raise ValueError('練習履歴の形式が不正です。元データを保持して停止しました。')
+                    self._write(db, scope, 'practice_archive:' + previous_id, previous)
+                    self._write(db, scope, 'practice_ids', list(dict.fromkeys([*ids, previous_id])))
             if message_pair:
                 row = db.execute('SELECT value FROM learning_documents WHERE scope=? AND name=?', (scope, 'history')).fetchone()
                 updates = {**updates, 'history': (json.loads(row[0]) if row else []) + message_pair}

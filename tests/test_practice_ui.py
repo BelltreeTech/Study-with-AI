@@ -34,6 +34,12 @@ def test_practice_hints_drafts_feedback_no_xp_and_edition_isolation(ui_environme
     assert not progress.load_course_progress(course_id).get('grade_history')
     button(app, 'もう一度解く（提出履歴は保持）').click().run()
     assert app.text_area[0].value == ''
+    assert 'HINT_ONE' not in text_content(app)
+    assert 'PRACTICE_SECRET_ANSWER' not in text_content(app)
+    hint_calls = len(ui_environment.provider.calls)
+    button(app, '次のヒントを見る').click().run()
+    assert 'HINT_ONE' in text_content(app) and 'HINT_TWO' not in text_content(app)
+    assert len(ui_environment.provider.calls) == hint_calls
     assert 'Clear explanation' in text_content(app)
     button(app, '新しい講義版を作る').click().run()
     finish_jobs(app, ui_environment)
@@ -121,4 +127,49 @@ def test_legacy_lecture_converts_without_reinterpreting_settings_or_progress(ui_
     assert 'OLD_LECTURE' in _export(course)
     selectbox(app, '講義の版').set_value(1).run()
     assert 'OLD_LECTURE' in text_content(app)
+    assert_clean(app)
+
+
+def test_new_practice_selects_latest_preserves_old_draft_and_failed_generation(ui_environment):
+    app = ui_environment.app()
+    create_course(app, ui_environment)
+    button(app, 'この章の講義を生成').click().run()
+    finish_jobs(app, ui_environment)
+    button(app, '練習を3問作る').click().run()
+    finish_jobs(app, ui_environment)
+    first_id = selectbox(app, '練習セット').value
+    app.text_area[0].input('Saved draft from first set.').run()
+    button(app, '練習を3問作る').click().run()
+    finish_jobs(app, ui_environment)
+    second_id = selectbox(app, '練習セット').value
+    assert second_id != first_id
+    assert app.text_area[0].value == ''
+    selectbox(app, '練習セット').set_value(first_id).run()
+    assert app.text_area[0].value == 'Saved draft from first set.'
+    app.run()
+    assert selectbox(app, '練習セット').value == first_id
+    ui_environment.provider.fail = True
+    button(app, '練習を3問作る').click().run()
+    finish_jobs(app, ui_environment, allow_error=True)
+    assert selectbox(app, '練習セット').value == first_id
+    assert app.text_area[0].value == 'Saved draft from first set.'
+    assert len(selectbox(app, '練習セット').options) == 2
+    assert progress.get_dashboard_data()['profile']['total_exp'] == 0
+
+
+def test_completed_unpublished_lecture_is_labeled_and_applied_without_generation(ui_environment):
+    app = ui_environment.app()
+    course_id = create_course(app, ui_environment)
+    button(app, 'この章の講義を生成').click().run()
+    finish_jobs(app, ui_environment)
+    original = progress.load_course_progress(course_id)['curriculum'][0]['lecture_content']
+    # Model a durable successful checkpoint whose chapter publication is missing.
+    progress.get_repository().update(lambda data: data['courses'][course_id]['curriculum'][0].pop('lecture_content'))
+    app.run()
+    assert '追加の生成要求はありません' in text_content(app)
+    calls = len(ui_environment.provider.calls)
+    button(app, '保存済みの講義を反映').click().run()
+    finish_jobs(app, ui_environment)
+    assert len(ui_environment.provider.calls) == calls
+    assert progress.load_course_progress(course_id)['curriculum'][0]['lecture_content'] == original
     assert_clean(app)

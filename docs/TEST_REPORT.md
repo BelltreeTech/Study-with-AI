@@ -1,5 +1,16 @@
 # 検証報告
 
+## 2026-09-20 追加改善: 練習の継続・履歴保全
+
+最終通常suite **532 passed / 2 skipped / 5 warnings、52.96秒**。Ruff、Mypy（45 source files）、`git diff --check`成功。追加の実Codex生成・Reset消費なし。本人データを使用せず、合成mockと隔離SQLite／AppTestで検証した。
+
+- 新しい練習セットの成功後に最新セットを表示。手動で選んだ過去セットと下書きは、別の生成が失敗しても維持。
+- 旧セットのarchive、最新セット、receiptを同一transactionへ移動。保存途中の故障で全体rollbackし、2件の同時適用でも全セットを保持。
+- やり直しでヒントと解答を閉じる。ヒントの再表示に追加生成はなく、累計利用記録・提出履歴は保持。
+- 完了済み未反映の講義に「保存済みの講義を反映」を表示。AppTestで追加Provider呼出し0件、元の講義結果と一致を確認。
+
+個別の保存/UI検証は21件成功。最終suiteへ含まれるため重複加算しない。2 skipは従来どおり実CLI localhost probeと実E5の任意テスト。新しい実生成品質の検証は保留のまま。証跡: `.study-runtime/practice-followup-tests.xml`。
+
 ## 2026-09-20: 日本語図・分割講義・独立練習の改修
 
 **今回の最終通常suite: 527 passed / 2 skipped / 5 warnings、52.03秒。** macOS arm64、既存 `.venv`、合成PDF・mock Provider・隔離保存先で実施。実Codex生成は0件、Reset消費0件。旧8ジョブのledgerは再初期化・追加実行していない。本人教材・答案・進捗を検証に利用していない。
