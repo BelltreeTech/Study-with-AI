@@ -173,3 +173,66 @@ def test_completed_unpublished_lecture_is_labeled_and_applied_without_generation
     assert len(ui_environment.provider.calls) == calls
     assert progress.load_course_progress(course_id)['curriculum'][0]['lecture_content'] == original
     assert_clean(app)
+
+
+def test_review_filter_preserves_hidden_drafts_without_generation(ui_environment):
+    app = ui_environment.app()
+    create_course(app, ui_environment)
+    button(app, 'この章の講義を生成').click().run()
+    finish_jobs(app, ui_environment)
+    button(app, '練習を3問作る').click().run()
+    finish_jobs(app, ui_environment)
+    app.text_area[0].input('Hidden draft must survive.').run()
+    review_boxes = [item for item in app.checkbox if item.label == '復習候補にする']
+    review_boxes[1].set_value(True).run()
+    calls = len(ui_environment.provider.calls)
+    next(item for item in app.checkbox if item.label == 'このセットの復習候補だけ表示').set_value(True).run()
+    assert len(app.text_area) == 1
+    assert 'Explain retrieval 2.' in text_content(app)
+    assert 'Explain retrieval 1.' not in text_content(app)
+    next(item for item in app.checkbox if item.label == '復習候補にする').set_value(False).run()
+    assert not app.text_area
+    assert 'このセットに復習候補はありません' in text_content(app)
+    next(item for item in app.checkbox if item.label == 'このセットの復習候補だけ表示').set_value(False).run()
+    assert app.text_area[0].value == 'Hidden draft must survive.'
+    assert len(ui_environment.provider.calls) == calls
+    assert progress.get_dashboard_data()['profile']['total_exp'] == 0
+    assert_clean(app)
+
+
+def test_reading_location_survives_navigation_and_isolated_by_edition(ui_environment, monkeypatch):
+    from test_ui import navigate
+
+    original = ui_environment.provider.generate
+
+    def generate(prompt, schema, cancel_event=None):
+        result = original(prompt, schema, cancel_event)
+        if 'requires_code' in result:
+            result['sections'].append({**result['sections'][0], 'section_id': 's2', 'title': 'Second reading section'})
+        if 'section_id' in result:
+            result['markdown'] += ' BODY_' + result['section_id']
+        return result
+
+    monkeypatch.setattr(ui_environment.provider, 'generate', generate)
+    app = ui_environment.app()
+    create_course(app, ui_environment)
+    button(app, 'この章の講義を生成').click().run()
+    finish_jobs(app, ui_environment)
+    calls = len(ui_environment.provider.calls)
+    assert 'BODY_s1' in text_content(app) and 'BODY_s2' in text_content(app)
+    selectbox(app, '読む範囲').set_value('s2').run()
+    assert 'BODY_s2' in text_content(app) and 'BODY_s1' not in text_content(app)
+    assert button(app, '次の節').disabled
+    button(app, '前の節').click().run()
+    assert selectbox(app, '読む範囲').value == 's1'
+    navigate(app, 'Dashboard')
+    navigate(app, 'Curriculum')
+    assert selectbox(app, '読む範囲').value == 's1'
+    button(app, '次の節').click().run()
+    assert selectbox(app, '読む範囲').value == 's2'
+    assert len(ui_environment.provider.calls) == calls
+    assert progress.get_dashboard_data()['profile']['total_exp'] == 0
+    button(app, '新しい講義版を作る').click().run()
+    finish_jobs(app, ui_environment)
+    assert selectbox(app, '読む範囲').value == ''
+    assert_clean(app)

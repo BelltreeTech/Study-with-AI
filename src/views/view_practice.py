@@ -3,7 +3,7 @@
 import streamlit as st
 
 from src.lecture_context import select_edition_context
-from src.views.common import render_pending, scope_key, show_sources, submit
+from src.views.common import render_markdown, render_pending, scope_key, show_sources, submit
 
 
 def _save_draft(runtime, scope, key):
@@ -56,11 +56,20 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
     practice = current if current and selected == current['practice_id'] else runtime.store.get(scope, 'practice_archive:' + selected)
     if not practice:
         return
-    for question in practice['questions']:
+    only_review = st.checkbox('このセットの復習候補だけ表示', key='review_filter_' + scope)
+    visible = 0
+    for number, question in enumerate(practice['questions'], 1):
         qscope = scope_key(subject, session, course_id, str(index),
                            'practice-feedback:' + lecture.get('lecture_id', 'legacy') + ':' + selected + ':' + question['id'])
+        if only_review and not runtime.store.get(qscope, 'review_candidate', False):
+            # A hidden question may still have a submitted job. Keep its result applicable.
+            render_pending(runtime, qscope)
+            continue
+        visible += 1
         with st.container(border=True):
-            st.markdown('**' + question['prompt'] + '**')
+            kinds = {'concept': '自分の言葉で説明', 'application': '具体的に適用', 'calculation': '計算で確かめる', 'code': 'コードを理解する'}
+            st.markdown(f"**問{number} · {kinds.get(question['kind'], '練習')}**")
+            render_markdown(question['prompt'])
             st.caption('学習目標: ' + question['learning_objective'])
             hints_used = runtime.store.get(qscope, 'hints_used', 0)
             hints = runtime.store.get(qscope, 'hints_revealed', min(hints_used, len(question['hints'])))
@@ -74,8 +83,8 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
                 runtime.store.set(qscope, 'answer_revealed', True)
                 st.rerun()
             if runtime.store.get(qscope, 'answer_revealed', False):
-                st.markdown(question['answer'])
-                st.markdown(question['explanation'])
+                render_markdown(question['answer'])
+                render_markdown(question['explanation'])
                 st.caption('確認基準: ' + ' / '.join(question['criteria']))
                 show_sources([s for s in practice.get('sources', []) if s['source_id'] in question['source_ids']])
             pending = render_pending(runtime, qscope)
@@ -90,14 +99,17 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
                     'lecture_id': lecture.get('lecture_id', 'legacy'), 'chapter_index': index,
                     'lecture_revision': lecture.get('material_revision'),
                 }, course_id=course_id, override_options=teaching)
-            for item in runtime.store.get(qscope, 'submissions', []):
-                with st.expander('提出した答案とフィードバック'):
+            submissions = runtime.store.get(qscope, 'submissions', [])
+            for submission_index, item in enumerate(reversed(submissions)):
+                label = ('最新のフィードバック' if submission_index == 0 else '以前のフィードバック') + f' · 提出{len(submissions) - submission_index}'
+                with st.expander(label, expanded=submission_index == 0):
                     st.text(item['answer'])
                     feedback = item['feedback']
                     for field, title in [('strengths', 'できた点'), ('misconceptions', '誤解'), ('next_steps', '次に直す箇所')]:
                         st.markdown('**' + title + '**')
                         for text in feedback[field]:
                             st.write('• ' + text)
+                    show_sources(feedback.get('sources', []))
             review = runtime.store.get(qscope, 'review_candidate', False)
             submissions = runtime.store.get(qscope, 'submissions', [])
             review_key = 'review_' + qscope + (submissions[-1]['job_id'] if submissions else '')
@@ -109,6 +121,9 @@ def render_practice(runtime, subject, session, course_id, index, lecture, teachi
                 runtime.store.set(qscope, 'hints_revealed', 0)
                 st.session_state.pop(key, None)
                 st.rerun()
+
+    if only_review and visible == 0:
+        st.info('このセットに復習候補はありません。チェックを外すとすべての問題を表示します。')
 
 
 def show_practice_history(runtime, subject, session, course_id, index, lecture):

@@ -19,7 +19,7 @@ from src.progress import (
 from src.runtime import Runtime
 from src.schemas import public_exam
 from src.views.common import options, render_pending, scope_key, show_text, submit
-from src.views.lecture_panel import batch_controls, edition_markdown, show_edition
+from src.views.lecture_panel import batch_controls, edition_markdown, render_reader, show_edition
 from src.views.view_exam import display_exam
 from src.views.view_practice import render_practice, show_practice_history
 
@@ -238,7 +238,7 @@ def render_curriculum_mode(runtime: Runtime) -> None:
     reading_tab, dialogue_tab, practice_tab, exam_tab = st.tabs(["講義", "相談", "練習", "修了試験"])
     with reading_tab:
         st.caption("解説付き例題は読みながら理解するインプットです。自分で解く問題は「練習」で取り組めます。")
-        show_edition(lecture)
+        render_reader(runtime, scope_key(subject, session, course_id, str(index), "reading:" + lecture.get("lecture_id", "legacy")), lecture)
     with practice_tab:
         render_practice(runtime, subject, session, course_id, index, lecture, course_options)
     dialogue_scope = scope_key(

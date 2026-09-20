@@ -1,5 +1,16 @@
 # 検証報告
 
+## 2026-09-20 追加改善: 読む位置と復習候補への導線
+
+通常suite **534 passed / 2 skipped / 5 warnings、54.86秒**。Ruff、Mypy（45 source files）、差分検査成功。実生成・Reset消費なし。本人教材・進捗を使わず隔離mock/AppTestで確認。
+
+- 分割講義の全章/単一節切替、前後の節、画面移動後の読む位置復元、新講義版への分離を検証。読む位置でEXPを増やさない。
+- 練習の復習候補フィルター、候補解除後の空表示、非表示答案の復元、操作による生成0件を検証。
+- 問題番号・問題種類を表示。練習本文と解答を共通の安全なMarkdown描画に統一。最新の提出フィードバックを先頭に開き、参照教材と以前の提出も保持。
+- 新しいUIはStreamlit AppTestで検証。今回追加したUIの実ブラウザ目視・実Codex生成は行っていない。任意CLI/E5テスト2件は従来どおりskip。
+
+証跡: `.study-runtime/reading-navigation-tests.xml`。前回までの結果は以下に保持。
+
 ## 2026-09-20 追加改善: 練習の継続・履歴保全
 
 最終通常suite **532 passed / 2 skipped / 5 warnings、52.96秒**。Ruff、Mypy（45 source files）、`git diff --check`成功。追加の実Codex生成・Reset消費なし。本人データを使用せず、合成mockと隔離SQLite／AppTestで検証した。

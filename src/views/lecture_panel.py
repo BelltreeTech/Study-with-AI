@@ -11,7 +11,7 @@ from src.runtime import Runtime
 from src.views.common import render_markdown, render_pending, show_text, submit
 
 
-def show_edition(lecture: dict) -> None:
+def show_edition(lecture: dict, section_id: str = "") -> None:
     if lecture.get('format') == 'sections-v1':
         plan = lecture['plan']
         st.markdown('**この章の到達目標**')
@@ -19,6 +19,8 @@ def show_edition(lecture: dict) -> None:
             st.write('• ' + objective)
         titles = {item['section_id']: item['title'] for item in plan['sections']}
         for section in lecture['sections']:
+            if section_id and section['section_id'] != section_id:
+                continue
             st.subheader(titles.get(section['section_id'], section['section_id']))
             show_text(section)
     elif 'markdown' in lecture:
@@ -83,3 +85,36 @@ def batch_controls(runtime: Runtime, subject: str, course_id: str, index: int,
             '_chapter_index': index, '_previous_lecture_id': lecture.get('lecture_id'),
             '_edition_id': uuid.uuid4().hex, '_batch_scope': scope,
         }, course_id=course_id, override_options=replace(teaching, time_scope='lecture_input'))
+
+
+def _select_reading(runtime: Runtime, scope: str, key: str, section_id: str | None = None) -> None:
+    if section_id is not None:
+        st.session_state[key] = section_id
+    runtime.store.set(scope, 'reading_section', st.session_state[key])
+
+
+def render_reader(runtime: Runtime, scope: str, lecture: dict) -> None:
+    """Remember a reading location without claiming mastery or granting progress."""
+    if lecture.get('format') != 'sections-v1':
+        show_edition(lecture)
+        return
+    sections = lecture['plan']['sections']
+    names = {item['section_id']: item['title'] for item in sections}
+    choices = [''] + list(names)
+    key = 'reading_section_' + scope
+    if key not in st.session_state:
+        saved = runtime.store.get(scope, 'reading_section', '')
+        st.session_state[key] = saved if saved in choices else ''
+    selected = st.selectbox('読む範囲', choices, key=key,
+                            format_func=lambda value: names.get(value, '章全体を読む'),
+                            on_change=_select_reading, args=(runtime, scope, key))
+    ids = list(names)
+    position = ids.index(selected) if selected else -1
+    left, right = st.columns(2)
+    left.button('前の節', key='previous_' + scope, disabled=position <= 0,
+                on_click=_select_reading, args=(runtime, scope, key, ids[max(0, position - 1)]))
+    right.button('次の節', key='next_' + scope, disabled=position >= len(ids) - 1,
+                 on_click=_select_reading, args=(runtime, scope, key, ids[min(position + 1, len(ids) - 1)]))
+    if selected:
+        st.caption(f'{position + 1} / {len(ids)}節を表示。読む位置を保存しています。修了・EXPには影響しません。')
+    show_edition(lecture, selected or "")
