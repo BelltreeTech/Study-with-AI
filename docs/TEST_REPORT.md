@@ -1,5 +1,40 @@
 # 検証報告
 
+## 2026-09-20: 日本語図・分割講義・独立練習の改修
+
+**今回の最終通常suite: 527 passed / 2 skipped / 5 warnings、52.03秒。** macOS arm64、既存 `.venv`、合成PDF・mock Provider・隔離保存先で実施。実Codex生成は0件、Reset消費0件。旧8ジョブのledgerは再初期化・追加実行していない。本人教材・答案・進捗を検証に利用していない。
+
+```sh
+.venv/bin/pytest -q --junitxml=.study-runtime/lecture-v4-tests.xml
+.venv/bin/ruff check .
+.venv/bin/mypy src app.py main.py scripts
+.venv/bin/python verify_score.py
+git diff --check
+```
+
+Ruff、Mypy（45 source files）、既存の採点閾値検査、差分空白検査も成功。2 skipはinstalled CLI localhost probeと実ローカルE5のopt-in。今回Provider・E5実装を変更していないため、これらは再実施せず、下記2026-09-19の結果を旧版の証拠として保持する。5 warningsは既存PyMuPDF/SWIGのdeprecation。
+
+| 対象 | 今回確認した内容 |
+| --- | --- |
+| 図 | 日本語・英語・数式記号をDOTに保持。危険構文・引用符・バックスラッシュ・制御文字・サイズ制限の回帰。 |
+| ブラウザ描画 | `127.0.0.1:8517`の合成Streamlit図で「入力データ」「正解」「損失」「連鎖律」、ŷ/∂/α/βを視認、AXにも正しい日本語。`uXXXX`化なし。本人教材・生成なし。 |
+| 時間・講義設計 | 旧設定のlegacy_totalと新設定lecture_input、全生成経路のインプット時間指示。合成の誤差逆伝播計画、前提・連鎖律・数値例・コード・目標・先行要約、節別検索。 |
+| 章バッチ | 最大8節＋設計、親lock FD保持、CAS、成功節再利用、各種失敗/利用枠/取消/総deadline/教材変更、実process異常終了→起動時0要求→明示再開、完了checkpoint保全。 |
+| 練習 | 3問契約、概念問題、条件付きコード、scope/revision/問題ID、ヒント・解答の明示表示と追加生成0、下書き復元、答案フィードバック・履歴・やり直し・復習候補、XP不変。 |
+| 保存互換・UI | APIキーなし5画面、4タブ、途中本文と明示再開、新旧講義版の分離・旧本文/答案の保存/書出し、従来の試験と進捗・章50EXPの冪等性。 |
+| 入力サイズ | 大きな合法3問snapshotを検証後1問へ絞る。全10根拠の送信重複を除外し、48KB/64KiB上限と保存原本を維持。 |
+| HTML仕様書 | localhostで改訂内容と11生成契約・節検索を表示確認。20節、検索でlecture_planを含む節へ絞込み。DOM幅1280pxに対し文書幅1280px。 |
+
+レビューで検出した空sessionによるバッチ開始不可、旧版の未採点解答露出、練習snapshotの大きさ・根拠重複、checkbox再描画による復習候補消去を修正した。修正後の限定再レビューで今回指摘に未解決P1/P2なし。テスト件数は重複する個別実行を足し合わせず、最終suiteの値を採用した。
+
+**未検証の範囲:** 新しい `lecture_plan` / `lecture_section` / `practice_set` / `practice_feedback` の実Codex生成、長い章の実生成時間・利用枠消費、実際の教材に対する説明品質・教育効果。構成・参照の検証は意味上の正しさの保証ではない。本文のコードは自動実行しない。初回最大9要求、明示再開では未完了分の追加消費があり、1回の開始/再開の総期限は30分。追加の実検証には別途明示予算が必要。
+
+README、学習仕様、設計・機能表・検索仕様、HTML仕様書を更新。既存branch `feat/codex-gpt6-medium-refactor`上で作業し、main変更・push・mergeは実施しない。
+
+---
+
+以下は以前の改修・実生成の履歴。上記の追加機能を実Codexで検証した記録とは扱わない。
+
 ## 第3段階（2026-09-19、現在の結果）
 
 開始HEAD `1a6aaafabf18aa82c3efe917851a5150627807c0`、ブランチ `feat/codex-gpt6-medium-refactor`。macOS arm64 / Python 3.12.13 / Streamlit 1.54.0。同じcheckoutの学習基盤を維持し、個別化した学習導線と公式Codexの実生成を実装・検証した。本人の専用home公式ChatGPTログインは完了済み。再clone、SQLite再移行、main変更、push、merge、履歴書換え、Reset消費は行っていない。本人の教材・進捗・答案を試験に使用していない。

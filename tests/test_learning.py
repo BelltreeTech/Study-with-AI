@@ -33,6 +33,25 @@ class FakeProvider:
         sources = data["sources"]
         refs = [sources[0]["source_id"]]
         props = schema["properties"]
+        if "requires_code" in props:
+            return {"title": "Learning retrieval", "objectives": ["Explain retrieval"], "prerequisites": ["Memory"],
+                    "requires_code": False, "requires_math": False, "source_ids": refs,
+                    "sections": [{"section_id": "s1", "title": "Retrieval concepts", "objectives": ["Explain retrieval"],
+                                  "topics": ["Retrieval"], "coverage": ["prerequisites", "concepts", "worked_example", "pitfalls", "summary"]}]}
+        if "section_id" in props:
+            section = data["input"]["section"]
+            return {"section_id": section["section_id"], "covered_objectives": section["objectives"],
+                    "summary": "Retrieval strengthens memory.", "markdown": "Retrieval practice improves learning. [source]",
+                    "source_ids": refs, "supplemental_markdown": "", "insufficient_evidence": False}
+        if "strengths" in props:
+            return {"question_id": data["input"]["question_id"], "strengths": ["Clear explanation"],
+                    "misconceptions": [], "next_steps": ["Add an example"], "review_topics": ["Retrieval"], "source_ids": refs}
+        if "questions" in props and "kind" in props["questions"]["items"]["properties"]:
+            return {"title": "Retrieval practice", "questions": [
+                {"id": f"p{i+1}", "kind": "concept" if i == 0 else "application", "prompt": f"Explain retrieval {i+1}.",
+                 "learning_objective": "Explain retrieval", "hints": ["HINT_ONE", "HINT_TWO", "HINT_THREE"],
+                 "answer": "PRACTICE_SECRET_ANSWER", "explanation": "PRACTICE_SECRET_EXPLANATION",
+                 "criteria": ["Names retrieval"], "source_ids": refs} for i in range(3)]}
         if "chapters" in props:
             return {
                 "chapters": [

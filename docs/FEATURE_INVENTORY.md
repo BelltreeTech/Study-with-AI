@@ -54,3 +54,11 @@
 第3段階は `1a6aaaf` から学習体験を拡張し、5画面と既存学習機能を保持した。profile・course設定・下書き・archive・context範囲は既存JSON documentへ追加するため、SQLite schema versionの変更や既存データの移行は不要。旧request/optionsを既定値付きで読み、新しい生成指示は `PROMPT_VERSION=study-3` として区別する。講義中の練習・理解チェックは正式試験の採点やXPイベントではない。
 
 未実装・未対応は、Windows実行、旧コード向けSQLite→JSON逆移行、複雑なMermaid描画。運用は [README](../README.md) の診断と合成E2E手順に従う。強制設定が新たに現れた場合は保持したまま監査する。現在の実行境界と第1段階の履歴は [CODEX_BOUNDARY.md](CODEX_BOUNDARY.md)、実行済みテスト・skip・内容品質の判定範囲は [TEST_REPORT.md](TEST_REPORT.md) に記録する。
+
+## 2026-09-20: 講義と練習の分離
+
+- 既存5画面を維持。コース内4タブ、章の設計＋最大8節、途中本文、明示再開を追加。
+- `time_scope`により旧設定と新しいインプット時間を区別。講義版・旧履歴・進捗は保存。
+- 3問練習、段階ヒント、明示解答、下書き、提出履歴、やり直し、復習候補を追加。合否・EXPには非連動。
+- 日本語GraphvizラベルはUnicode保持、安全な構文制限を維持。
+- 実装: `lecture_batches.py`、`views/lecture_panel.py`、`views/view_practice.py`、Service/schema/context。受入テスト: `test_diagrams.py`、`test_learning_v4.py`、`test_lecture_batches.py`、`test_practice_ui.py`。詳細は[学習仕様](LEARNING_DESIGN.md)。

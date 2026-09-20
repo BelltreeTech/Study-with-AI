@@ -23,9 +23,8 @@ def test_saved_supplemental_example_reaches_dialogue_and_quiz(ui_environment, mo
     button(app, "この章の講義を生成").click().run()
     finish_jobs(app, ui_environment)
     saved = progress.load_course_progress(course_id)["curriculum"][0]["lecture_content"]
-    assert saved["supplemental_markdown"] == supplement
+    assert saved["sections"][0]["supplemental_markdown"] == supplement
     assert "COOKING_SECOND_EXAMPLE" in text_content(app)
-    assert "補足の例題や練習についても質問できます" in text_content(app)
 
     text_input(app, "講義への質問・反論").input("例題2をもう少し詳しく説明してください").run()
     button(app, "対話する").click().run()

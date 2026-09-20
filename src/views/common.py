@@ -10,6 +10,7 @@ import streamlit as st
 from src import progress
 from src.config import LearningOptions
 from src.diagrams import mermaid_to_dot
+from src.lecture_batches import LectureBatch
 from src.runtime import Runtime
 from src.service import LearningRequest
 from src.views.navigation import queue_navigation
@@ -80,7 +81,7 @@ def submit(
         return
     try:
         req = runtime.service.prepare(
-            kind,
+            "lecture_plan" if kind == "lecture_batch" else kind,
             st.session_state["selected_subject"],
             st.session_state["study_session"],
             payload,
@@ -105,7 +106,8 @@ def submit(
                 req.scope,
                 req.to_dict(),
                 req.request_id,
-                lambda cancelled: runtime.service.execute(req, cancelled),
+                lambda cancelled: (LectureBatch(runtime.service, runtime.store).run(req, cancelled)
+                                   if kind == "lecture_batch" else runtime.service.execute(req, cancelled)),
             )
 
         runtime.store.claim_submission(scope, register, is_active)
@@ -121,7 +123,7 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
     runtime.service.validate_revision(req)
     # A stale tab cannot apply a job to another subject/session/course.
     expected_scope = json.loads(scope)
-    if [req.subject, req.session_id, req.course_id] != expected_scope[:3]:
+    if [req.subject, "" if job.get("kind") == "lecture_batch" else req.session_id, req.course_id] != expected_scope[:3]:
         raise ValueError("結果の保存先と科目・セッション・コースが一致しません。")
     result = job["result"]
     event = f"job:{job['id']}"
@@ -152,7 +154,7 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
                       "context_coverage": result.get("context_coverage")},
         )
         updates["created_course"] = course_id
-    elif req.kind == "lecture":
+    elif req.kind == "lecture" or job.get("kind") == "lecture_batch":
 
         def save_lecture(data: dict) -> None:
             course = data["courses"].get(req.course_id)
@@ -163,7 +165,10 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
                 raise ValueError("章が変更されています。")
             if (chapter.get("lecture_content") or {}).get("lecture_id") != req.payload.get("_previous_lecture_id"):
                 raise ValueError("別の学習セッションで講義が更新されています。この結果の上書きを停止しました。")
-            chapter["lecture_content"] = {**result, "lecture_id": job["id"]}
+            previous = chapter.get("lecture_content")
+            if previous:
+                chapter.setdefault("lecture_versions", []).append(previous)
+            chapter["lecture_content"] = {**result, "lecture_id": result.get("lecture_id", job["id"])}
 
         progress.get_repository().update(save_lecture, event_id=event, fingerprint=req.digest())
     elif req.kind == "grade":
@@ -192,6 +197,11 @@ def _apply(runtime: Runtime, scope: str, job: dict) -> None:
             status = progress.process_weakness_clear(req.subject, challenge, event_id=event + ":review")
             if status in ("mastered", "leveled_up"):
                 progress.add_exp(req.subject, 100 if status == "mastered" else 30, event_id=event + ":review-exp")
+    elif req.kind == "practice_feedback":
+        history = runtime.store.get(scope, "submissions", [])
+        updates["submissions"] = history + [{"job_id": job["id"], "answer": req.payload["answer"],
+                                            "feedback": result}]
+        updates["review_candidate"] = bool(result.get("review_topics"))
     elif req.kind == "quiz":
         if req.payload.get("_weakness"):
             result["weakness_challenge"] = req.payload["_weakness"]
@@ -214,6 +224,17 @@ def render_pending(runtime: Runtime, scope: str) -> bool:
     state = job["state"]
     if state in ("queued", "running"):
         st.info(f"生成ジョブ: {'待機中' if state == 'queued' else '実行中'} · {job_id[:8]} · GPT-6 / Medium")
+        if job.get("kind") == "lecture_batch":
+            checkpoint = runtime.store.get(scope, "lecture_batch", {})
+            plan = checkpoint.get("plan") or {}
+            total = len(plan.get("sections", []))
+            done = len(checkpoint.get("sections", []))
+            st.caption(f"章の設計完了 · {done} / {total}節を保存済み" if total else "章を設計中（本文は最大8節）")
+            if total:
+                st.progress(done / total)
+            for section in checkpoint.get("sections", []):
+                with st.expander("作成途中 · " + section.get("section_id", "節")):
+                    show_text(section)
         col1, col2 = st.columns(2)
         if col1.button("状態を更新", key="refresh_" + scope):
             st.rerun()

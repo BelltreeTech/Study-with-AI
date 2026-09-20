@@ -51,14 +51,14 @@ def test_course_profile_and_question_starters_apply_through_grade(ui_environment
     progress.get_repository().update(lambda state: state["courses"][course_id].update(learning_options=asdict(saved)))
     app.run()
     assert saved.learning_goal in text_content(app)
-    assert "1回 45分" in text_content(app)
+    assert "1章のインプット時間の目安 45分" in text_content(app)
     assert "Learning retrieval 5" in text_content(app)  # Locked chapters remain visible on the roadmap.
     assert "前の章の修了後に進めます" in text_content(app)
 
     button(app, "この章の講義を生成").click().run()
     finish_jobs(app, ui_environment)
     assert prompt_data(ui_environment.provider.calls[-1])["options"] == asdict(saved)
-    assert [tab.label for tab in app.tabs] == ["1 · 講義を読む", "2 · 相談・例で理解する", "3 · 理解を確かめる"]
+    assert [tab.label for tab in app.tabs] == ["講義", "相談", "練習", "修了試験"]
     text_input(app, "講義への質問・反論").input("My existing question.").run()
     before = len(ui_environment.provider.calls)
     button(app, "具体例で理解する").click().run()

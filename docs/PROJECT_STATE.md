@@ -1,5 +1,16 @@
 # 再開用状態
 
+## 2026-09-20 更新: 講義と練習の分離
+
+- 作業先・branch維持。変更前HEAD `25292fa7464524aa36c9d28f685409243b2fcf71`。
+- 日本語DOTラベル修正、lecture_input/legacy_total、lecture_plan＋最大8節のbatch/途中保存/明示再開、講義版保存、独立3問練習・答案feedbackを実装。
+- 通常527 passed / 2 skipped、Ruff・Mypy45files・採点閾値・diff成功。実ブラウザの日本語図、HTML仕様書の表示・検索を確認。
+- 実生成0、Reset0。既存8ジョブledgerを保持。Provider、認証、model/effort、実行境界、Embedding、DBschemaを変更しない。
+- 新方式の実Codex出力品質は未検証。再開の手順と制約は[学習仕様](LEARNING_DESIGN.md)、証拠は[TEST_REPORT](TEST_REPORT.md)。
+- 本人教材・進捗を試験に使っていない。合成試験はtmpおよび`.study-runtime/lecture-ui-check`。HTML変更前コピーは`.study-runtime/specification/SYSTEM_SPECIFICATION.before-lecture-v4.html`。
+
+以下は以前の状態記録。
+
 確認日: 2026-09-19、macOS arm64 / Python 3.12.13 / Streamlit 1.54.0。
 
 ## 作業場所と履歴

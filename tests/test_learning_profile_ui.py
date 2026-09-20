@@ -30,7 +30,7 @@ def save_profile(app, *, goal, previous='I know the basics.', approach='例題�
     text_input(app, '学習ゴール').input(goal)
     text_input(app, 'すでに知っていること・苦手なこと').input(previous)
     selectbox(app, '学び方').set_value(approach)
-    selectbox(app, '1回の学習時間').set_value(minutes)
+    selectbox(app, '1章のインプット時間の目安').set_value(minutes)
     text_input(app, 'たとえ・例に使ってほしい分野').input(analogy)
     button(app, '学び方を保存').click().run()
     assert_clean(app)
@@ -76,7 +76,7 @@ def test_profile_save_subject_switch_and_restart_preserve_separate_preferences(u
         assert_clean(restarted)
         assert text_input(restarted, '学習ゴール').value == saved['learning_goal']
         assert selectbox(restarted, '学び方').value == saved['learning_approach']
-        assert selectbox(restarted, '1回の学習時間').value == saved['session_minutes']
+        assert selectbox(restarted, '1章のインプット時間の目安').value == saved['session_minutes']
         assert dict(restarted.session_state['learning_options']) == saved
     assert ui_environment.provider.calls == []
     assert progress.get_dashboard_data()['profile']['total_exp'] == 0
@@ -121,13 +121,13 @@ def test_course_keeps_creation_options_after_profile_change_and_restart(ui_envir
     finish_jobs(app, ui_environment)
     lecture = progress.load_course_progress(course_id)['curriculum'][0]['lecture_content']
     assert lecture['learning_options'] == original
-    assert len(ui_environment.provider.calls) == 2
+    assert len(ui_environment.provider.calls) == 3
     for _ in range(2):
         app.run()
         assert_clean(app)
         assert len(subject_courses()) == 1
         assert progress.load_course_progress(course_id)['learning_options'] == original
-    assert len(ui_environment.provider.calls) == 2
+    assert len(ui_environment.provider.calls) == 3
     navigate(app, 'Dashboard')
     app.button(key='home_resume').click().run()
     assert_clean(app)
@@ -145,7 +145,7 @@ def test_course_keeps_creation_options_after_profile_change_and_restart(ui_envir
     saved = progress.load_course_progress(course_id)
     assert saved['learning_options'] == original
     assert saved['curriculum'][0]['lecture_content'] == lecture
-    assert len(ui_environment.provider.calls) == 2
+    assert len(ui_environment.provider.calls) == 3
     assert progress.get_dashboard_data()['profile']['total_exp'] == 0
 
 

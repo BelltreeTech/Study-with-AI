@@ -186,7 +186,7 @@ def test_ui_pdf_search_answer_course_lecture_exam_grade_progress_and_restart(ui_
     finish_jobs(app, ui_environment)
     assert 'Retrieval practice improves learning' in text_content(app)
     chapters = progress.load_course_progress(course_id)['curriculum']
-    assert chapters[0]['lecture_content']['source_ids']
+    assert chapters[0]['lecture_content']['sections'][0]['source_ids']
     assert all(not chapter.get('lecture_content') for chapter in chapters[1:])
 
     text_input(app, '講義への質問・反論').input('How does retrieval improve memory?').run()

@@ -60,7 +60,7 @@ def _select(text: str, query: str, budget: int) -> tuple[str, dict]:
             "total_chars": len(text), "selected_chars": len(text), "context_chars": len(text),
             "is_excerpt": False, "ranges": ranges, "selection_method": "lecture_excerpt_v1",
         }
-    spans = _spans(text, min(1000, max(300, budget // 4)))
+    spans = _spans(text, min(1000, max(40, budget // 4)))
     query_terms = _terms(query[:2400])
     matches = [_terms(text[start:end]) & query_terms for start, end in spans]
     frequency = Counter(term for terms in matches for term in terms)
@@ -149,3 +149,62 @@ def select_lecture_material(text: str, supplement: str = "", query: str = "") ->
         "sections": sections, "selection_method": "lecture_and_supplement_excerpt_v2",
     }
     return selected_main, selected_supplement, context
+
+
+def select_edition_context(lecture: dict, section_id: str | None = None) -> dict:
+    """Return bounded input from a validated lecture edition, including its goals.
+
+    Source arrays are deliberately omitted: StudyService retrieves fresh material
+    evidence. Each selected section retains separate main/supplement text.
+    """
+    from src.schemas import SCHEMAS, InvalidResult, validate_lecture_plan, validate_lecture_section
+
+    if not isinstance(lecture, dict):
+        raise InvalidResult("保存講義の形式が不正です。")
+    if lecture.get("format") != "sections-v1":
+        if section_id is not None:
+            raise InvalidResult("旧形式の講義に節IDを指定できません。")
+        main, supplement, _ = select_lecture_material(
+            lecture.get("markdown", lecture.get("lecture_text", "")), lecture.get("supplemental_markdown", "")
+        )
+        return {"lecture": main, "lecture_supplement": supplement,
+                "lecture_revision": lecture.get("material_revision"), "lecture_context_mode": "edition_excerpts"}
+    if not isinstance(lecture.get("plan"), dict) or not isinstance(lecture.get("sections"), list):
+        raise InvalidResult("分割講義の計画または節が不正です。")
+    plan = {key: value for key, value in lecture["plan"].items() if key in SCHEMAS["lecture_plan"]["properties"]}
+    validate_lecture_plan(plan)
+    sections = lecture["sections"]
+    if len(sections) != len(plan["sections"]):
+        raise InvalidResult("分割講義の節が揃っていません。")
+    if not isinstance(lecture.get("material_revision"), str) or not lecture["material_revision"]:
+        raise InvalidResult("分割講義の教材revisionが不明です。")
+    for item, expected in zip(sections, plan["sections"], strict=True):
+        if not isinstance(item, dict):
+            raise InvalidResult("分割講義の節が不正です。")
+        core = {key: value for key, value in item.items() if key in SCHEMAS["lecture_section"]["properties"]}
+        validate_lecture_section(core, expected, item.get("sources"))
+        if item.get("material_revision", lecture["material_revision"]) != lecture["material_revision"]:
+            raise InvalidResult("分割講義の節の教材revisionが一致しません。")
+    selected = [(item, expected) for item, expected in zip(sections, plan["sections"], strict=True)
+                if section_id is None or item["section_id"] == section_id]
+    if not selected:
+        raise InvalidResult("指定した講義節がありません。")
+    introduction = "【講義版からの抜粋・全内容の網羅ではありません】\n到達目標: " + " / ".join(plan["objectives"])
+    allowance = (5600 - len(introduction)) // len(selected)
+    main_parts = [introduction]
+    supplement_parts = []
+    for item, expected in selected:
+        heading = f"\n【{item['section_id']}: {expected['title']}】\n到達目標: " + " / ".join(expected["objectives"]) + "\n"
+        supplement_heading = f"\n【{item['section_id']} 一般的補足（教材原文ではありません）】\n"
+        budget = allowance - len(heading) - (len(supplement_heading) if item["supplemental_markdown"] else 0)
+        main_text, supplement_text = item["markdown"], item["supplemental_markdown"]
+        main_budget = min(len(main_text), budget * 2 // 3 if supplement_text else budget)
+        supplement_budget = min(len(supplement_text), budget - main_budget)
+        main_budget = min(len(main_text), budget - supplement_budget)
+        main, _ = _select(main_text, " ".join(expected["topics"]), main_budget)
+        supplement, _ = _select(supplement_text, " ".join(expected["topics"]), supplement_budget)
+        main_parts.append(heading + main)
+        if supplement:
+            supplement_parts.append(supplement_heading + supplement)
+    return {"lecture": "".join(main_parts), "lecture_supplement": "".join(supplement_parts),
+            "lecture_revision": lecture["material_revision"], "lecture_context_mode": "edition_excerpts"}

@@ -74,6 +74,22 @@ class LearningRepository:
         with self.connect() as db:
             self._write(db, scope, name, value)
 
+    def update_document(self, scope: str, name: str, update: Callable[[Any], Any], *, mirror_name: str | None = None) -> Any:
+        """Read, compare and update one document under the existing write lock.
+
+        The callback must not perform generation or access this repository again.
+        Exceptions roll back without replacing the original document.
+        """
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT value FROM learning_documents WHERE scope=? AND name=?',
+                             (scope, name)).fetchone()
+            value = update(json.loads(row[0]) if row else None)
+            self._write(db, scope, name, value)
+            if mirror_name is not None:
+                self._write(db, scope, mirror_name, value)
+            return value
+
     def claim_submission(self, scope: str, prepare_and_submit: Callable[[], str],
                          is_active: Callable[[str], bool]) -> tuple[str, bool]:
         """Serialize each scope's check + job submission + pending pointer.

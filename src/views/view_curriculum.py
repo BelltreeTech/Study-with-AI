@@ -1,11 +1,13 @@
 """On-demand courses, lectures, dialogue and deterministic advancement."""
 
+import json
 import uuid
 from dataclasses import replace
 
 import streamlit as st
 
 from src.config import PASS_SCORES, LearningOptions
+from src.lecture_context import select_edition_context
 from src.progress import (
     complete_chapter,
     delete_course,
@@ -15,8 +17,11 @@ from src.progress import (
     load_course_progress,
 )
 from src.runtime import Runtime
+from src.schemas import public_exam
 from src.views.common import options, render_pending, scope_key, show_text, submit
+from src.views.lecture_panel import batch_controls, edition_markdown, show_edition
 from src.views.view_exam import display_exam
+from src.views.view_practice import render_practice, show_practice_history
 
 EXAM_DIFFICULTIES = {
     "🟢 学部級（基礎確認）": {"line": 70, "api": "Easy"},
@@ -37,19 +42,15 @@ def _export(course: dict) -> str:
             f"## 第{chapter.get('chapter', index + 1)}章: {chapter.get('title', '無題の章')}",
             chapter.get("description", ""),
         ]
-        lecture = chapter.get("lecture_content") or {}
-        lines += [lecture.get("markdown", lecture.get("lecture_text", "（講義未生成）"))]
-        if lecture.get("supplemental_markdown"):
-            lines += ["### 一般的な補足", lecture["supplemental_markdown"]]
-        for source in lecture.get("sources", lecture.get("source_chunks", [])):
-            lines.append(f"- {source.get('source_id', '')}: {source['source_file']} p.{source['page_number']}")
+        for lecture in [chapter.get("lecture_content") or {}, *chapter.get("lecture_versions", [])]:
+            lines += ["### 講義版 " + lecture.get("lecture_id", "legacy"), edition_markdown(lecture)]
     return "\n\n".join(lines)
 
 
 def _course_options(course: dict) -> LearningOptions:
     """A saved course keeps its teaching choices when sidebar preferences change."""
     saved = course.get("learning_options")
-    return LearningOptions(**saved) if saved is not None else options()
+    return LearningOptions.from_saved(saved) if saved is not None else replace(options(), time_scope="legacy_total")
 
 
 def _jump_to_chapter(course_id: str, index: int) -> None:
@@ -85,7 +86,7 @@ def _roadmap(course_id: str, chapters: list[dict], current_index: int) -> None:
 
 def render_curriculum_mode(runtime: Runtime) -> None:
     st.title("コース・授業")
-    st.caption("教材から学習の道筋を作り、講義 → 相談 → 確認テストの順で、一章ずつ理解を積み重ねます。")
+    st.caption("教材から学習の道筋を作り、講義 → 相談・練習 → 修了試験の順で、一章ずつ理解を積み重ねます。")
     subject = st.session_state.get("selected_subject", "")
     session = st.session_state.get("study_session", "")
     courses = {key: load_course_progress(key) for key in get_all_courses()}
@@ -172,7 +173,7 @@ def render_curriculum_mode(runtime: Runtime) -> None:
         st.markdown("**このコースの学習プラン**")
         goal = getattr(course_options, "learning_goal", "")
         st.write(goal or course.get("title", "この教材を理解する"))
-        st.caption(f"1回 {getattr(course_options, 'session_minutes', 25)}分 · "
+        st.caption(f"{'旧方式の学習時間' if course_options.time_scope == 'legacy_total' else '1章のインプット時間の目安'} {course_options.session_minutes}分 · "
                    f"{getattr(course_options, 'learning_approach', '体系的に理解')} · {course_options.audience}")
         st.caption("このコースを作成したときの設定で講義・相談・テストを続けます。" if course.get("learning_options")
                    else "以前のコースのため、生成には現在の学習設定を使います。")
@@ -194,7 +195,7 @@ def render_curriculum_mode(runtime: Runtime) -> None:
     _roadmap(course_id, chapters, index)
     chapter = chapters[index]
     scope = scope_key(subject, session, course_id, str(index), "lecture")
-    active = render_pending(runtime, scope)
+    render_pending(runtime, scope)
     lecture = chapter.get("lecture_content")
     st.subheader(f"第{index + 1}章 · {chapter['title']}")
     st.write(chapter.get("description", ""))
@@ -202,30 +203,44 @@ def render_curriculum_mode(runtime: Runtime) -> None:
                else f"現在地: 全{len(chapters)}章のうち第{index + 1}章")
     if summary["completed"] == summary["total"]:
         st.success("全章を修了しました。ロードマップから苦手な章を復習したり、講義ノートを保存できます。")
-    if st.button("この章の講義を生成" if not lecture else "この章の講義を再生成", disabled=active):
-        submit(
-            runtime,
-            scope,
-            "lecture",
-            {
-                "title": chapter["title"],
-                "description": chapter.get("description", ""),
-                "_chapter_index": index,
-                "_previous_lecture_id": (chapter.get("lecture_content") or {}).get("lecture_id"),
-            },
-            course_id=course_id,
-            override_options=course_options,
-        )
+    batch_controls(runtime, subject, course_id, index, chapter, course_options)
     if not lecture:
-        st.info("まずこの章の講義を作成しましょう。教材に沿った説明を読み、疑問を相談してから確認テストへ進めます。")
+        st.info("まずこの章の講義を作成しましょう。途中までの本文も、保存された節から読めます。")
         return
-    reading_tab, dialogue_tab, exam_tab = st.tabs(["1 · 講義を読む", "2 · 相談・例で理解する", "3 · 理解を確かめる"])
+    versions = [lecture, *reversed(chapter.get("lecture_versions", []))]
+    if len(versions) > 1:
+        version_index = st.selectbox("講義の版", range(len(versions)),
+                                     format_func=lambda i: ("現行" if i == 0 else "保存された旧版") + " · " + versions[i].get("lecture_id", "legacy")[:8])
+        if version_index:
+            old = versions[version_index]
+            show_edition(old)
+            st.caption("旧版を閲覧中。現行版へ切り替えると相談・練習・修了試験を利用できます。")
+            old_scope = scope_key(subject, session, course_id, str(index), "exam:" + old.get("lecture_id", "legacy"))
+            old_exam = runtime.store.get(old_scope, "quiz")
+            old_grade = runtime.store.get(old_scope, "grade")
+            if old_exam:
+                with st.expander("旧版の試験・答案・採点"):
+                    st.json(old_exam if old_grade else public_exam(old_exam))
+                    st.text(runtime.store.get(old_scope, "answer_draft:" + old_exam["attempt_id"], ""))
+                    st.json(old_grade or {})
+                    st.download_button("旧版の試験履歴を保存", json.dumps({"exam": old_exam if old_grade else public_exam(old_exam), "grade": old_grade, "answer": runtime.store.get(old_scope, "answer_draft:" + old_exam["attempt_id"], "")}, ensure_ascii=False, indent=2), "previous-exam.json")
+            show_practice_history(runtime, subject, session, course_id, index, old)
+            old_dialogue = scope_key(subject, session, course_id, str(index), "dialogue:" + old.get("lecture_id", "legacy"))
+            old_history = runtime.store.get(old_dialogue, "history", [])
+            if old_history:
+                with st.expander("旧版の相談履歴"):
+                    for message in old_history:
+                        st.text(message["content"])
+                    st.download_button("旧版の相談履歴を保存", json.dumps(old_history, ensure_ascii=False, indent=2), "previous-dialogue.json")
+            return
+    if lecture.get("learning_options"):
+        course_options = LearningOptions.from_saved(lecture["learning_options"])
+    reading_tab, dialogue_tab, practice_tab, exam_tab = st.tabs(["講義", "相談", "練習", "修了試験"])
     with reading_tab:
-        st.caption("まず大まかな流れをつかみ、気になった用語や例を「相談」で掘り下げましょう。")
-        if "markdown" in lecture:
-            show_text(lecture)
-        else:
-            render_lecture_content(lecture.get("lecture_text", ""))
+        st.caption("解説付き例題は読みながら理解するインプットです。自分で解く問題は「練習」で取り組めます。")
+        show_edition(lecture)
+    with practice_tab:
+        render_practice(runtime, subject, session, course_id, index, lecture, course_options)
     dialogue_scope = scope_key(
         subject, session, course_id, str(index), "dialogue:" + lecture.get("lecture_id", "legacy")
     )
@@ -236,6 +251,10 @@ def render_curriculum_mode(runtime: Runtime) -> None:
             st.caption("相談・出題では講義本文と一般的な補足を区別して参照します。補足の例題や練習についても質問できます。")
         if len(lecture.get("markdown", lecture.get("lecture_text", ""))) + len(lecture.get("supplemental_markdown", "")) > 6000:
             st.caption("長い講義のため、相談・出題では冒頭と末尾、質問に関係する箇所などを抜粋して参照します。講義全文は「講義を読む」で確認できます。")
+        section_names = {s['section_id']: s['title'] for s in lecture.get('plan', {}).get('sections', [])}
+        selected_section = st.selectbox('相談する節', [''] + list(section_names),
+                                        format_func=lambda key: section_names.get(key, '章全体'))
+        st.caption('選択した節を優先して抜粋します。章全体では各節と到達目標を分散して参照し、全文を読んだものとは扱いません。')
         discussing = render_pending(runtime, dialogue_scope)
         history = runtime.store.get(dialogue_scope, "history", [])
         for message in history:
@@ -267,9 +286,7 @@ def render_curriculum_mode(runtime: Runtime) -> None:
                 "dialogue",
                 {
                     "question": question,
-                    "lecture": lecture.get("markdown", lecture.get("lecture_text", "")),
-                    "lecture_supplement": lecture.get("supplemental_markdown", ""),
-                    "lecture_revision": lecture.get("material_revision"),
+                    **select_edition_context(lecture, selected_section or None),
                     "history": history[-20:],
                 },
                 course_id=course_id,
@@ -281,7 +298,7 @@ def render_curriculum_mode(runtime: Runtime) -> None:
         st.caption("講義を閉じても説明できるか試してみましょう。採点後に根拠と改善点を振り返れます。")
         testing = render_pending(runtime, exam_scope)
         if chapter.get("status") == "completed":
-            st.success("この章は修了済みです。講義・対話・採点履歴は再閲覧できます。")
+            st.success("この章の修了実績は保持されています。この版の試験結果は別に保存し、50 EXPを重複付与しません。")
         difficulty = st.selectbox("修了試験の難易度", list(PASS_SCORES),
                                   index=list(PASS_SCORES).index(course_options.difficulty), key="course_difficulty_" + course_id)
         st.caption(f"合格ライン: {PASS_SCORES[difficulty]}点。合格後に章を修了すると、次の章へ進めます。")
@@ -293,9 +310,7 @@ def render_curriculum_mode(runtime: Runtime) -> None:
                 "quiz",
                 {
                     "topic": chapter["title"],
-                    "lecture": lecture.get("markdown", lecture.get("lecture_text", "")),
-                    "lecture_supplement": lecture.get("supplemental_markdown", ""),
-                    "lecture_revision": lecture.get("material_revision"),
+                    **select_edition_context(lecture),
                     "chapter_index": index,
                     "lecture_id": lecture.get("lecture_id"),
                 },

@@ -87,3 +87,7 @@ STUDY_TEST_LOCAL_EMBEDDING=1 uv run --extra semantic pytest tests/test_retrieval
 検索unitテストは、科目分離、content/config/model revision更新、追加・削除、旧cache保全、vector不整合、symlink・不正パス拒否、壊れたPDF、混在PDFの選択OCR、OCR依存不足、空検索、モデル取得後の切替、query Embedding失敗時の縮退を確認した。合成PDFは3ページすべて描画し、日英テキストの欠け・重なりがないことを確認した。macOS上で検証し、Windowsのdirectory descriptor対応は未検証。
 
 代表抜粋と学習導線には、多数PDF/長いPDFでの分散、関連箇所、空query、硬い件数/文字数上限、cache再利用、範囲metadata、BM25環境の明示overview、通常検索の無断fallback禁止、セッション別参照方法、長い講義の原文範囲選択を対象とする合成テストを追加している。これらの実装契約の検証を、大規模教材での教育品質の保証に読み替えない。
+
+## 分割講義の参照（2026-09-20）
+
+各節の生成では節のtitle/topicsで改めて教材を検索する。先行節全文ではなく要点だけを渡す。相談・練習では節の指定を優先し、章全体の試験では各節の目標・本文・補足を分散して合計6,000文字以内へ選ぶ。教材引用と一般的補足の区分を保持し、版からの抜粋であることを明示する。全節を保存していても、後続の1要求が講義全文を読んだことにはならない。

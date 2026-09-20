@@ -23,8 +23,8 @@ PASS_SCORE_EASY = 70
 PASS_SCORE_NORMAL = 80
 PASS_SCORE_HARD = 90
 PASS_SCORES = {'Easy': 70, 'Normal': 80, 'Hard': 90}
-PROMPT_VERSION = 'study-3'
-SCHEMA_VERSION = 'study-2'
+PROMPT_VERSION = 'study-4'
+SCHEMA_VERSION = 'study-3'
 LEARNING_APPROACHES = ('体系的に理解', '例題を多く解く', '実践・プロジェクト', '試験に備える')
 SESSION_MINUTES = (15, 25, 45, 60)
 LEARNING_GOAL_MAX_LENGTH = 1200
@@ -44,6 +44,16 @@ class LearningOptions:
     learning_approach: str = '体系的に理解'
     analogy_domain: str = ''
     session_minutes: int = 25
+    time_scope: str = 'lecture_input'
+
+    @classmethod
+    def from_saved(cls, saved: dict) -> 'LearningOptions':
+        """Missing scope in an existing saved profile means the legacy total."""
+        if not isinstance(saved, dict):
+            raise ValueError('保存された学習設定の形式が不正です。')
+        if not saved:
+            return cls()
+        return cls(**({'time_scope': 'legacy_total'} | saved))
 
     def __post_init__(self) -> None:
         if self.difficulty not in PASS_SCORES or not 1 <= self.top_k <= 10:
@@ -59,3 +69,5 @@ class LearningOptions:
             raise ValueError('学び方は表示された選択肢から指定してください。')
         if type(self.session_minutes) is not int or self.session_minutes not in SESSION_MINUTES:
             raise ValueError('学習時間は15、25、45、60分のいずれかで指定してください。')
+        if self.time_scope not in ('lecture_input', 'legacy_total'):
+            raise ValueError('学習時間の対象が不正です。')

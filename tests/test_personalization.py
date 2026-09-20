@@ -44,7 +44,7 @@ def test_old_options_and_persisted_request_load_with_defaults(personalized):
     service, _, _ = personalized
     legacy = {"audience": "初心者向け (Beginner)", "length": "普通 (Normal)",
               "tutor_style": "標準（理論と具体例）", "require_math": False, "difficulty": "Normal", "top_k": 5}
-    options = LearningOptions(**legacy)
+    options = LearningOptions.from_saved(legacy)
     assert (options.learning_goal, options.prior_knowledge, options.analogy_domain) == ("", "", "")
     assert options.learning_approach == "体系的に理解" and options.session_minutes == 25
     saved = service.prepare("lecture", "Synthetic/Study", "session", {"title": "Recall"}, options).to_dict()
@@ -92,7 +92,7 @@ def test_every_generation_retains_preferences_and_result_snapshot(personalized, 
     assert data["options"] == asdict(options)
     assert result["learning_options"] == asdict(options)
     assert result["model"] == "gpt-6-astra" and result["effort"] == "medium"
-    assert request.prompt_version == "study-3"
+    assert request.prompt_version == "study-4"
 
 
 def test_preferences_cannot_escape_the_untrusted_data_object(personalized):
@@ -118,10 +118,9 @@ def test_brief_lecture_still_has_complete_learning_steps(personalized, minutes, 
     prompt = provider.calls[-1]
     assert "簡潔なら3文" not in prompt
     assert f"例題は{examples}個" in prompt
-    assert "解き方を見る例題→ヒントを使って一緒に解く練習→自力で解く確認" in prompt
-    assert "理解チェック、次回の復習" in prompt
+    assert "自己演習は別機能で提供し、講義の入力時間には含めない" in prompt
+    assert "時間に合わせて説明を薄くせず" in prompt
     assert "その対応・限界" in prompt
-    assert "点数・合否・XPが発生するとは書かない" in prompt
 
 
 @pytest.mark.parametrize("difficulty", ["Easy", "Normal", "Hard"])
